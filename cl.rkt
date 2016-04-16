@@ -242,7 +242,8 @@
   #:fields
   [lit string?]
   [v? (-> any/c boolean?)]
-  [ppv (-> v? pp:doc?)]
+  ;; XXX should be v?
+  [ppv (-> any/c pp:doc?)]
   #:methods Type
   (define (name) lit)
   (define (pp #:name n #:ptrs p)
@@ -251,7 +252,7 @@
   (define (eq t)
     (and (Literal? t)
          (equal? lit (Literal-lit t))))
-  (define (val?) v?)
+  (define (val? x) (v? x))
   (define (pp:val v) (ppv v)))
 
 (define (pp:char c)
@@ -277,13 +278,12 @@
     (and (Int? t)
          (eq? signed? (Int-signed? t))
          (= bits (Int-bits t))))
-  (define (val?)
-    (λ (x)
-      (and (exact-integer? x)
-           (or signed?
-               (not (negative? x)))
-           (<= (integer-length x)
-               (- bits (if signed? 1 0))))))
+  (define (val? x)
+    (and (exact-integer? x)
+         (or signed?
+             (not (negative? x)))
+         (<= (integer-length x)
+             (- bits (if signed? 1 0)))))
   (define (pp:val v)
     (pp:text (number->string v))))
 
@@ -314,10 +314,11 @@
   (define (eq t)
     (and (Float? t)
          (= bits (Float-bits t))))
-  (define (val?)
-    (match bits
-      [32 single-flonum?]
-      [64 double-flonum?]))
+  (define (val? x)
+    ((match bits
+       [32 single-flonum?]
+       [64 double-flonum?])
+     x))
   (define (pp:val v)
     ;; XXX add f/d?
     (pp:text (number->string v))))
@@ -339,7 +340,7 @@
   (define (eq t)
     (and (Ptr? t)
          ((Type-eq st) t)))
-  (define (val?) $NULL?)
+  (define (val? x) ($NULL? x))
   (define (pp:val v)
     (pp:text "NULL")))
 
@@ -378,7 +379,7 @@
     ((Type-h! rng) !)
     (for ([d (in-list dom)])
       ((Type-h! d) !)))
-  (define (val?) #f)
+  (define (val? x) #f)
   (define pp:val pp:never))
 
 ;; XXX Any Opaque Extern
@@ -386,7 +387,8 @@
 (define-class Seal*
   #:fields
   [v? (or/c #f (-> any/c boolean?))]
-  [ppv (-> (if v? v? (Type-val? st)) pp:doc?)]
+  ;; XXX should be (if v? v? (Type-val? st))
+  [ppv (-> any/c pp:doc?)]
   [tag symbol?] [st Type?]  
   #:methods Type
   (define (name) (format "~a(~a)" tag ((Type-name st))))
@@ -398,10 +400,10 @@
     (and (Seal*? t)
          (eq? tag (Seal*-tag t))
          ((Type-eq st) (Seal*-st t))))
-  (define (val?)
+  (define (val? x)
     (if v?
-        v?
-        (Type-val? st)))
+        (v? x)
+        ((Type-val? st) x)))
   (define (pp:val v)
     (if ppv
         (ppv v)
@@ -419,6 +421,7 @@
 
 ;;; Variables
 
+;; XXX Turn into $vref
 (define-srcloc-struct Var
   [type Type?]
   [name CName?])
@@ -704,11 +707,19 @@
   (define (ret?)
     ((Stmt-ret? body))))
 
-(define-class $%let1
+(define-class *$%let1
   #:fields
+  [var-b (box/c (or/c false/c Var?))]
+  [body-b (box/c (or/c false/c Stmt?))]
   [vty Type?]
-  [body (-> Var? Stmt?)]
+  [bodyf (-> Var? Stmt?)]
   #:methods Stmt
+  (unless (unbox var-b)
+    (set-box! var-b (Var vty (gencsym))))
+  (define var (unbox var-b))
+  (unless (unbox body-b)
+    (set-box! body-b (bodyf var)))
+  (define body (unbox body-b))
   (define (pp)
     (pp:h-append pp:lbrace pp:space ((Var-pp var)) pp:semi
                  (pp:nest NEST (pp:h-append pp:line ((Stmt-pp body)))) pp:rbrace))
@@ -716,6 +727,8 @@
     ((Stmt-h! body) !))
   (define (ret?)
     ((Stmt-ret? body))))
+
+(define-class-alias $%let1 (*$%let1 (box #f) (box #f)))
 
 (define-class $set!
   #:fields
