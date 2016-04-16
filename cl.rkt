@@ -153,7 +153,7 @@
                 (real-name arg ...))]))
          (provide name)))]))
 
-;; Definitions
+;;; General
 (require (prefix-in pp: pprint))
 
 ;; XXX make sure string is okay
@@ -165,6 +165,8 @@
   [pre (listof string?)]
   [litc string?]
   [post (listof string?)])
+
+;;; Types
 
 (define-interface Type
   [name
@@ -203,6 +205,7 @@
 (define-class-alias Size (Literal "size_t"))
 (define-class-alias Char (Literal "char"))
 (define-class-alias Void (Literal "void"))
+(define Void? (Type-eq Void))
 
 (define-class Int
   #:fields
@@ -247,7 +250,21 @@
 (define-class-alias F32 (Float 32))
 (define-class-alias F64 (Float 64))
 
-;; XXX Record Ptr Arr Union Fun
+;; XXX Record Ptr Arr Union
+
+(define-class Fun
+  #:fields
+  [dom (listof Type?)]
+  [rng Type?]
+  #:methods Type
+  (define (name)
+    (list (for/list ([t (in-list dom)])
+            ((Type-name t)))
+          '->
+          ((Type-name rng))))
+  ;; XXX
+  )
+
 ;; XXX Any Opaque Extern
 
 (define-class Seal
@@ -266,13 +283,20 @@
 
 (define-class-alias Bool (Seal 'Bool UI8))
 
+;;; Variables
+
 (define-srcloc-struct Var
   [type Type?]
   [name CName?])
 
+(define (gencsym [s 'c])
+  (symbol->string (gensym (regexp-replace* #rx"[^A-Za-z_0-9]" (format "_~a" s) "_"))))
+
 (define (Var-pp var)
   (λ ()
-    ((Type-pp (Var-type var)) #:name (Var-name var))))
+    ((Type-pp (Var-type var)) #:name (Var-name var) #:ptrs 0)))
+
+;;; Expressions
 
 (define-interface Expr
   [pp
@@ -299,6 +323,10 @@
           "Expr-lval? returns #t"
           (λ (x)
             ((Expr-lval? x))))))
+
+;; XXX Exprs
+
+;;; Statement
 
 (define-interface Stmt
   [pp
@@ -422,30 +450,114 @@
   #:fields
   [ty Type?]
   [e (Expr/c ty)]
-  #:methods
+  #:methods Stmt
   (define (pp)
-    (pp:h-append (pp:text "return") pp:space ((Expr-pp e)) pp:semi))
+    (pp:h-append (pp:text "return")
+                 (if (Void? ty)
+                     pp:empty
+                     (pp:h-append pp:space ((Expr-pp e))))
+                 pp:semi))
   (define (headers! !)
     ((Expr-headers! e)))
   (define (ret?) #t))
 
-(define-class $ret/Void
+;; Declaration
+
+(define-interface Decl
+  [ty
+   (-> Type?)]
+  ;; XXX This needs to be a much "thicker" interface so we can
+  ;; 1. Get headers
+  ;; 2. Give names/globality
+  ;; 3. Get prototypes
+  ;; 4. Get definitions
+  [pp
+   (-> #:global? boolean?
+       #:name CName?
+       #:proto-only? boolean?
+       pp:doc?)])
+
+(define-class $%proc
   #:fields
-  #:methods
-  (define (pp)
-    (pp:h-append (pp:text "return") pp:semi))
-  (define (headers! !) (void))
-  (define (ret?) #t))
+  [hn symbol?]
+  [pty Fun?]
+  [body (-> (apply list/c (make-list (length (Fun-dom pty)) Var?))
+            Stmt?)]
+  #:methods Decl
+  (define (ty) pty)
+  (define (pp #:global? global? #:name n #:proto-only? proto-only?)
+    (define maybe-static
+      (if global? pp:empty (pp:h-append (pp:text "static") pp:space)))
+    (define t-or-vs
+      (if proto-only?
+          (Fun-dom pty)
+          (for/list ([t (in-list (Fun-dom pty))])
+            (Var t (gencsym)))))
+    (pp:h-append
+     maybe-static
+     (pp:h-append
+      (pp:hs-append ((Type-pp (Fun-rng pty)) #:name #f #:ptrs 0) (pp:text n)
+                    pp:lparen
+                    (apply pp:hs-append
+                           (pp:apply-infix
+                            pp:comma
+                            (for/list ([t-or-v (in-list t-or-vs)])
+                              (if proto-only?
+                                  ((Type-pp t-or-v) #:name #f #:ptrs 0)
+                                  ((Var-pp t-or-v))))))
+                    pp:rparen)
+      (if proto-only?
+          pp:semi
+          (pp:h-append
+           pp:space
+           (pp:nest NEST
+                    (pp:h-append
+                     pp:lbrace pp:line
+                     ((Stmt-pp (apply body t-or-vs)))))
+           pp:line
+           pp:rbrace))))))
+
+;; Convenience
+
+(define-syntax ($proc stx)
+  (syntax-parse stx
+    [(_ ([vt:expr v:id] ...) rt:expr
+        . body)
+     (quasisyntax/loc stx
+       ($%proc (or '#,(syntax-local-name) (gensym '$proc))
+               (Fun (list vt ...) rt)
+               (λ (v ...)
+                 (define-class-alias $ret ($ret/ty rt))
+                 (define-class-alias $return ($ret/ty rt #f))
+                 . body)))]))
+(provide $proc)
 
 (module* test racket/base
   (require (submod ".."))
-  (define (ppt . ds)
-    (for-each (λ (x) (pp:pretty-print (pp:h-append x pp:line))) ds))
-  (ppt
-   ((Type-pp UI8) #:name #f #:ptrs 0)
-   ((Type-pp UI8) #:name #f #:ptrs 1)
-   ((Type-pp UI8) #:name #f #:ptrs 2)
-   ((Type-pp UI8) #:name "example" #:ptrs 0)
-   ((Type-pp UI8) #:name "example" #:ptrs 1)
-   ((Type-pp UI8) #:name "example" #:ptrs 2))
-  ($do 5))
+  (define fac-rec
+    ($proc ([UI64 n]) UI64
+           ($if ($<= n ($v UI64 0))
+                ($ret ($v UI64 1))
+                ($ret ($* n
+                          ($app fac-rec
+                                ($- n ($v UI64 1))))))))
+  (define fac
+    ($proc ([UI64 n]) UI64
+           ($let1 ([UI64 acc ($v UI64 1)])
+                  ($while ($!= n ($v UI64 0))
+                          ($set! acc ($* acc n))
+                          ($set! n ($- n ($v UI64 1))))
+                  ($ret acc))))
+  (define main
+    ($proc () SI32
+           (define (test-fac which fac)
+             ($let1 ([UI64 r ($v UI64 0)])
+                    ($for ([UI32 i ($in-range ($v UI32 10000))])
+                          ($set! r ($app fac ($v UI64 12))))
+                    ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
+           ($begin (test-fac "iter" fac)
+                   (test-fac " rec" fac-rec)
+                   ($ret ($v (SI32) 0)))))
+  (define this
+    ($default-flags ($exe main)))
+  (run this))
