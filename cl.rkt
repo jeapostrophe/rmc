@@ -94,6 +94,7 @@
      (with-syntax*
        ([(n ...) (generate-temporaries #'(f ...))]
         [name? (format-id #'name "~a?" #'name)]
+        [name-object (format-id #f "~a-~a" #'name #'object)]
         [(name-f ...)
          (for/list ([f (in-list (syntax->list #'(f ...)))])
            (format-id #'name "~a-~a" #'name f))]
@@ -125,18 +126,20 @@
                    (list (cons _inst:name-m m^)
                          ...)))))))
            (define-srcloc-struct name-fields [f f-ctc] ...)
+           (struct name-object object ()
+             #:reflection-name 'name)
            (define-syntax (name stx)
              (syntax-parse stx
                [(_ n ...)
                 (quasisyntax/loc stx
-                  (object name-interfaces
-                          #,(syntax/loc stx
-                              (name-fields n ...))))]
+                  (name-object name-interfaces
+                               #,(syntax/loc stx
+                                   (name-fields n ...))))]
                [_:id
                 (quasisyntax/loc stx
-                  (object name-interfaces
-                          #,(syntax/loc stx
-                              (name-fields))))]))
+                  (name-object name-interfaces
+                               #,(syntax/loc stx
+                                   (name-fields))))]))
            (define (name? x)
              (and (object? x)
                   (name-fields? (object-fields x))))
@@ -1078,11 +1081,13 @@
 (define-syntax ($let1 stx)
   (syntax-parse stx
     [(_ ([ty:expr n:id e:expr]) . b)
-     (syntax/loc stx
+     (quasisyntax/loc stx
        ($%let1 ty
-               (λ (n)
-                 ($seq ($set! n e)
-                       ($begin . b)))))]))
+               #,(quasisyntax/loc stx
+                   (λ (n)
+                     ($seq ($set! n e)
+                           #,(quasisyntax/loc #'b
+                               ($begin . b)))))))]))
 (provide $let1)
 
 (define-simple-macro ($while e . b)
