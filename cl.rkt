@@ -48,6 +48,7 @@
            ...
            (define name? _name?)
            (provide
+            name
             (contract-out
              [_name? (-> any/c boolean?)]
              [name? (-> any/c boolean?)])))))]))
@@ -1171,38 +1172,3 @@
              "-fmerge-all-constants" "-fno-ident" "-fPIE" "-fPIC")
            ($ldflags '("-dead_strip") u)))
 (provide $default-flags)
-
-(define <stdio.h> (CHeader '() '() '() "<stdio.h>" '()))
-(define $printf ($extern <stdio.h> "printf" Any))
-(provide <stdio.h>
-         $printf)
-
-(module* test racket/base
-  (require (submod ".."))
-  (define fac-rec
-    ($proc ([UI64 n]) UI64
-           ($if ($<= n ($v UI64 0))
-                ($ret ($v UI64 1))
-                ($ret ($* n
-                          (fac-rec ($- n ($v UI64 1))))))))
-  (define fac
-    ($proc ([UI64 n]) UI64
-           ($let1 ([UI64 acc ($v UI64 1)])
-                  ($while ($!= n ($v UI64 0))
-                          ($set! acc ($* acc n))
-                          ($set! n ($- n ($v UI64 1))))
-                  ($ret acc))))
-  (define main
-    ($proc () SI32
-           (define (test-fac which fac)
-             ($let1 ([UI64 r ($v UI64 0)])
-                    ($for ([UI32 i ($in-range ($v UI32 10000))])
-                          ($set! r (fac ($v UI64 12))))
-                    ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
-           ($begin (test-fac "iter" fac)
-                   (test-fac " rec" fac-rec)
-                   ($ret ($v SI32 0)))))
-  (define this
-    ($default-flags ($exe main)))
-  (emit! this)
-  (run this))
