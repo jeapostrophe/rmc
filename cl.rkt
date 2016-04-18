@@ -342,7 +342,7 @@
 (define (pp:op1 o a)
   (pp:h-append pp:lparen (pp:text o) ((Expr-pp a)) pp:rparen))
 
-;; XXX These seem macro-producible, but I get an erro about pp not
+;; XXX These seem macro-producible, but I get an error about pp not
 ;; being bound.
 
 (define-class $!
@@ -621,7 +621,7 @@
 (define-class $ret/ty
   #:fields
   [ty Type?]
-  [e (Expr/c ty)]
+  [e (or/c false/c (Expr/c ty))]
   #:methods Stmt
   (define (pp)
     (pp:h-append (pp:text "return")
@@ -630,7 +630,7 @@
                      (pp:h-append pp:space ((Expr-pp e))))
                  pp:semi))
   (define (h! !)
-    ((Expr-h! e) !))
+    (when e ((Expr-h! e) !)))
   (define (ret?) #t))
 
 ;; Declaration
@@ -676,7 +676,12 @@
   [hns (listof (or/c false/c symbol?))]
   [body (dynamic->*
          #:mandatory-domain-contracts (make-list (length (Fun-dom pty)) Var?)
-         #:range-contracts (list Stmt?))]
+         #:range-contracts (list
+                            (and/c Stmt?
+                                   (flat-named-contract
+                                    "returns"
+                                    (λ (x)
+                                      ((Stmt-ret? x)))))))]
   #:procedure $dref-$%app
   #:methods Decl
   (define (hint) hn)
@@ -978,6 +983,17 @@
                            #,(quasisyntax/loc #'b
                                ($begin . b)))))))]))
 (provide $let1)
+
+(define-syntax ($let* stx)
+  (syntax-parse stx
+    [(_ () . b)
+     (syntax/loc stx
+       ($begin . b))]
+    [(_ ([ty n e] . more) . b)
+     (syntax/loc stx
+       ($let1 ([ty n e])
+              ($let* more . b)))]))
+(provide $let*)
 
 (define-simple-macro ($while e . b)
   ($%while e ($begin . b)))
