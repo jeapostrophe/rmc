@@ -29,5 +29,9 @@
   ($default-flags ($exe main)))
 
 (module+ test
+  (require rackunit
+           racket/string)
   (emit! this)
-  (run this))
+  (check-equal? (string-split (run&capture this) "\n")
+                (list "iter r = 479001600"
+                      " rec r = 479001600")))

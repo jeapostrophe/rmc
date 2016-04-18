@@ -1041,7 +1041,7 @@
     (λ ()
       (delete-file* p))))
 
-(define (run u)
+(define (compile&f u f)
   (define er (emit u))
   (call-with-temporary
    "~a.c"
@@ -1059,11 +1059,29 @@
            (or (apply system* cc-pth
                       (append (list o) (emit-result-ldflags er) (list "-o" b)))
                (error 'run "Failed to link"))
-           (system* b)
-           (void))))))))
+           (f b))))))))
+
+(define (run u)
+  (compile&f u (λ (b) (system* b) (void))))
+
+(define (run&capture u)
+  (compile&f u
+             (λ (b)
+               (define bs-stdout (open-output-string))
+               (define-values (sp stdout stdin stderr)
+                 (subprocess #f (current-input-port) (current-error-port) b))
+               (local-require racket/port)
+               (define cpt (thread (λ () (copy-port stdout bs-stdout))))
+               (subprocess-wait sp)
+               (close-input-port stdout)
+               (thread-wait cpt)
+               (get-output-string bs-stdout))))
+
 (provide
  (contract-out
-  [run (-> Unit? void?)]))
+  [compile&f (-> Unit? (-> path-string? any) any)]
+  [run (-> Unit? void?)]
+  [run&capture (-> Unit? string?)]))
 
 ;; Convenience
 (require racket/stxparam)
