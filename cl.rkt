@@ -419,19 +419,8 @@
   (pp:text (format "~v" v)))
 (define-class-alias String (Seal* string? pp:cstring 'String (Ptr Char)))
 
-;;; Variables
-
-;; XXX Turn into $vref
-(define-srcloc-struct Var
-  [type Type?]
-  [name CName?])
-
 (define (gencsym [s 'c])
   (symbol->string (gensym (regexp-replace* #rx"[^A-Za-z_0-9]" (format "_~a" s) "_"))))
-
-(define (Var-pp var)
-  (λ ()
-    ((Type-pp (Var-type var)) #:name (Var-name var) #:ptrs 0)))
 
 ;;; Expressions
 
@@ -465,7 +454,24 @@
           (λ (x)
             ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $vref $dref $sref $uref $ife $seal $unseal
+;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $dref $sref $uref
+;; $ife $seal $unseal
+
+;;; Variables
+
+(define-class Var
+  #:fields
+  [type Type?]
+  [name CName?]
+  #:methods Expr
+  (define (pp) (pp:text name))
+  (define (ty) type)
+  (define (lval?) #t)
+  (define (h! !) ((Type-h! type) !)))
+
+(define (Var-pp var)
+  (λ ()
+    ((Type-pp (Var-type var)) #:name (Var-name var) #:ptrs 0)))
 
 (define (pp:op1 o a)
   (pp:h-append pp:lparen (pp:text o) ((Expr-pp a)) pp:rparen))
