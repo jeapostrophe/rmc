@@ -6,6 +6,7 @@
                      syntax/srcloc)
          syntax/location
          racket/contract/base
+         racket/contract/combinator
          racket/generic
          racket/match
          racket/list
@@ -74,9 +75,14 @@
              (and (object? x)
                   (hash-has-key? (object-interfaces x) _inst:name)))
            (define (name-m x)
-             (hash-ref ((hash-ref (object-interfaces x) _inst:name)
-                        (object-fields x))
-                       _inst:name-m))
+             (hash-ref (hash-ref (object-interfaces x) _inst:name
+                                 (λ ()
+                                   (error 'name-m "Not an instance of ~v: ~e"
+                                          'name x)))
+                       _inst:name-m
+                       (λ ()
+                         (error 'name-m "Interface missing method ~v: ~e"
+                                'name-m x))))
            ...
            (provide
             (contract-out
@@ -88,13 +94,22 @@
   (syntax-parse stx
     [(_ name:id
         #:fields [f:id f-ctc:expr] ...
-        #:methods iname
-        idef:expr ...)
+        (~optional (~seq #:procedure proc:id))
+        (~seq #:methods iname
+              idef:expr ...))
      #:declare iname (static interface-info? "interface")
      (with-syntax*
        ([(n ...) (generate-temporaries #'(f ...))]
+        [maybe-proc
+         (if (attribute proc)
+             (syntax/loc stx
+               (#:property prop:procedure
+                (λ (me . args)
+                  (proc me args))))
+             #'())]
         [name? (format-id #'name "~a?" #'name)]
         [name-object (format-id #f "~a-~a" #'name #'object)]
+        [name-object? (format-id #'name-object "~a?" #'name-object)]
         [(name-f ...)
          (for/list ([f (in-list (syntax->list #'(f ...)))])
            (format-id #'name "~a-~a" #'name f))]
@@ -114,35 +129,36 @@
             #'iname))])
        (syntax/loc stx
          (begin
-           (define name-interfaces
-             (make-immutable-hasheq
-              (list
-               (cons
-                _inst:name
-                (λ (fields)
-                  (match-define (_name-fields srcloc f ...) fields)
-                  idef ...
-                  (make-immutable-hasheq
-                   (list (cons _inst:name-m m^)
-                         ...)))))))
+           (define (make-name-object fields)
+             (match-define (_name-fields srcloc f ...) fields)
+             idef ...
+             (name-object
+              (make-immutable-hasheq
+               (list
+                (cons
+                 _inst:name
+                 (make-immutable-hasheq
+                  (list (cons _inst:name-m m^)
+                        ...)))))
+              fields))
            (define-srcloc-struct name-fields [f f-ctc] ...)
            (struct name-object object ()
-             #:reflection-name 'name)
+             #:reflection-name 'name
+             . maybe-proc)
            (define-syntax (name stx)
              (syntax-parse stx
                [(_ n ...)
                 (quasisyntax/loc stx
-                  (name-object name-interfaces
-                               #,(syntax/loc stx
-                                   (name-fields n ...))))]
+                  (make-name-object
+                   #,(syntax/loc stx
+                       (name-fields n ...))))]
                [_:id
                 (quasisyntax/loc stx
-                  (name-object name-interfaces
-                               #,(syntax/loc stx
-                                   (name-fields))))]))
+                  (make-name-object
+                   #,(syntax/loc stx
+                       (name-fields))))]))
            (define (name? x)
-             (and (object? x)
-                  (name-fields? (object-fields x))))
+             (name-object? x))
            (define (name-f x)
              (_name-fields-f (object-fields x)))
            ...
@@ -258,12 +274,12 @@
   (define (val? x) (v? x))
   (define (pp:val v) (ppv v)))
 
-(define (pp:char c)
+(define (pp:char-val c)
   (pp:text (number->string (char->integer c))))
 (define (never? x) #f)
 
 (define-class-alias Size (Literal "size_t" never? pp:never))
-(define-class-alias Char (Literal "char" char? pp:char))
+(define-class-alias Char (Literal "char" char? pp:char-val))
 (define-class-alias Void (Literal "void" never? pp:never))
 (define Void? (Type-eq Void))
 
@@ -323,8 +339,11 @@
        [64 double-flonum?])
      x))
   (define (pp:val v)
-    ;; XXX add f/d?
-    (pp:text (number->string v))))
+    ;; XXX what if number->string doesn't include "."
+    (pp:h-append (pp:text (number->string v))
+                 (match bits
+                   [32 (pp:text "f")]
+                   [64 pp:empty]))))
 
 (define-class-alias F32 (Float 32))
 (define-class-alias F64 (Float 64))
@@ -385,7 +404,7 @@
   (define (val? x) #f)
   (define pp:val pp:never))
 
-;; XXX Any Opaque Extern
+;; XXX Opaque Extern
 
 (define-class Seal*
   #:fields
@@ -441,26 +460,48 @@
 (define (Expr/c ty)
   (Expr?/c
    (format "~a type" ((Type-name ty)))
-   (let ([eq (Type-eq ty)])
-     (λ (x)
-       (define xt ((Expr-ty x)))
-       (eq xt)))))
+   (Type-eq ty)))
 
-(define (Expr?/c lab ?)
-  (and/c Expr?
-         (flat-named-contract lab ?)))
+(define (Expr?/c lab ty?)
+  (define name (format "Expr with ~a" lab))
+  (make-flat-contract
+   #:name name
+   #:first-order Expr?
+   #:projection
+   (λ (b)
+     (λ (x)
+       (if (Expr? x)
+           (let ([xt ((Expr-ty x))])
+             (if (or (Any? xt) (ty? xt))
+                 x
+                 (raise-blame-error
+                  b x
+                  '(expected: "~a" given: "Expr(~e) with type ~e")
+                  name x xt)))
+           (raise-blame-error
+            b x
+            '(expected: "~a" given: "~e")
+            name x))))))
 
 (define Lval/c
   (and/c Expr?
-         (flat-named-contract
-          "Expr-lval? returns #t"
-          (λ (x)
-            ((Expr-lval? x))))))
+         (flat-named-contract "Expr-lval?"                              
+                              (λ (x)
+                                ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $dref $sref $uref
-;; $ife $seal $unseal
+;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref $ife
+;; $seal $unseal
 
-;;; Variables
+(define-class $dref
+  #:fields
+  [d Decl?]
+  #:methods Expr
+  (define ec (current-ec))
+  (ec-add-decl! ec d #f)
+  (define (pp) (pp:text (hash-ref (emit-context-decl->name ec) d)))
+  (define (ty) (hash-ref (emit-context-decl->ty ec) d))
+  (define (lval?) #f)
+  (define (h! !) (void)))
 
 (define-class Var
   #:fields
@@ -609,7 +650,11 @@
 (define-class $%app
   #:fields
   [rator (Expr?/c "function" Fun?)]
-  [rands (apply list/c (map Expr/c (Fun-dom ((Expr-ty rator)))))]
+  [rands
+   (let ([rator-ty ((Expr-ty rator))])
+     (if (Any? rator-ty)
+         (listof Expr?)
+         (apply list/c (map Expr/c (Fun-dom rator-ty)))))]
   #:methods Expr
   (define (pp)
     (pp:h-append ((Expr-pp rator)) pp:lparen
@@ -617,7 +662,11 @@
                         (pp:apply-infix pp:comma
                                         (map (λ (r) ((Expr-pp r))) rands)))
                  pp:rparen))
-  (define (ty) (Fun-rng ((Expr-ty rator))))
+  (define (ty)
+    (define rator-ty ((Expr-ty rator)))
+    (if (Any? rator-ty)
+        Any
+        (Fun-rng rator-ty)))
   (define (lval?) #f)
   (define (h! !)
     ((Expr-h! rator) !)
@@ -716,19 +765,14 @@
   (define (ret?)
     ((Stmt-ret? body))))
 
-(define-class *$%let1
+(define-class $%let1
   #:fields
-  [var-b (box/c (or/c false/c Var?))]
-  [body-b (box/c (or/c false/c Stmt?))]
+  [hn (or/c false/c symbol?)]
   [vty Type?]
   [bodyf (-> Var? Stmt?)]
   #:methods Stmt
-  (unless (unbox var-b)
-    (set-box! var-b (Var vty (gencsym))))
-  (define var (unbox var-b))
-  (unless (unbox body-b)
-    (set-box! body-b (bodyf var)))
-  (define body (unbox body-b))
+  (define var (Var vty (gencsym hn)))  
+  (define body (bodyf var))
   (define (pp)
     (pp:h-append pp:lbrace pp:space ((Var-pp var)) pp:semi
                  (pp:nest NEST (pp:h-append pp:line ((Stmt-pp body)))) pp:rbrace))
@@ -736,8 +780,6 @@
     ((Stmt-h! body) !))
   (define (ret?)
     ((Stmt-ret? body))))
-
-(define-class-alias $%let1 (*$%let1 (box #f) (box #f)))
 
 (define-class $set!
   #:fields
@@ -766,7 +808,7 @@
                      (pp:h-append pp:space ((Expr-pp e))))
                  pp:semi))
   (define (h! !)
-    ((Expr-h! e)))
+    ((Expr-h! e) !))
   (define (ret?) #t))
 
 ;; Declaration
@@ -774,13 +816,10 @@
 (define-interface Decl
   [ty
    (-> Type?)]
+  [name
+   (-> CName?)]
   [hint
    (-> (or/c false/c symbol?))]
-  ;; XXX This needs to be a much "thicker" interface so we can
-  ;; 1. Get headers
-  ;; 2. Give names/globality
-  ;; 3. Get prototypes
-  ;; 4. Get definitions
   [visit!
    (-> #:headers! (-> CHeader? void?)
        #:global? boolean?
@@ -789,39 +828,47 @@
         #:proto-only? boolean?
         pp:doc?))])
 
+(define ($dref-$%app d args)
+  ($%app ($dref d) args))
+
 (define-class $extern
   #:fields
   [h CHeader?]
   [n CName?]
   [ety Type?]
+  #:procedure $dref-$%app
   #:methods Decl
   (define (hint) #f)
   (define (ty) ety)
-  (define (visit! #:headers! ! #:global global? #:name n)
+  (define (name) n)
+  (define (visit! #:headers! ! #:global? global? #:name n)
+    (! h)
     ((Type-h! ety) !)
     (λ (#:proto-only? po?)
       pp:empty)))
 
-;; XXX Add prop:procedure
 (define-class $%proc
   #:fields
   [hn symbol?]
   [pty Fun?]
+  [hns (listof (or/c false/c symbol?))]
   [body (dynamic->*
-         ;; XXX The type of these vars has to match the type of pty's dom
          #:mandatory-domain-contracts (make-list (length (Fun-dom pty)) Var?)
          #:range-contracts (list Stmt?))]
+  #:procedure $dref-$%app
   #:methods Decl
   (define (hint) hn)
   (define (ty) pty)
+  (define (name) (gencsym hn))
   (define (visit! #:headers! headers! #:global? global? #:name n)
     (define maybe-static
       (if global? pp:empty (pp:h-append (pp:text "static") pp:space)))
     (define dom
       (Fun-dom pty))
     (define vs
-      (for/list ([t (in-list dom)])
-        (Var t (gencsym))))
+      (for/list ([t (in-list dom)]
+                 [hn (in-list hns)])
+        (Var t (gencsym hn))))
     ((Type-h! pty) headers!)
     (define the-body
       (apply body vs))
@@ -902,11 +949,11 @@
 (define current-ec (make-parameter #f))
 (define (ec-add-decl! ec d n)
   (define ds (emit-context-decls ec))
-  ;; XXX test if d is in ds?
-  (set-add! ds d)
-  (hash-set! (emit-context-decl->name ec) d n)
-  (define ty ((Decl-ty d)))
-  (hash-set! (emit-context-decl->ty ec) d ty))
+  (unless (set-member? ds d)
+    (set-add! ds d)
+    (hash-set! (emit-context-decl->name ec) d (or n ((Decl-name d))))
+    (define ty ((Decl-ty d)))
+    (hash-set! (emit-context-decl->ty ec) d ty)))
 (define (ec-fixed-point! ec)
   (define repeat? #f)
   (define hs (emit-context-headers ec))
@@ -916,9 +963,7 @@
   (for ([d (in-set (emit-context-decls ec))]
         #:unless (hash-has-key? d->pp d))
     (set! repeat? #t)
-    (define n
-      (hash-ref! d->n d
-                 (λ () (gencsym ((Decl-hint d))))))
+    (define n (hash-ref! d->n d (λ () ((Decl-name d)))))
     (define ppf
       ((Decl-visit! d)
        #:headers!
@@ -930,10 +975,10 @@
     (hash-set! d->pp d (ppf #:proto-only? #f)))
   (when repeat?
     (ec-fixed-point! ec)))
-(define (pp:decl-proto ec i)
-  (error 'pp:decl-proto "xxx"))
-(define (pp:decl ec i)
-  (error 'pp:decl "xxx"))
+(define (pp:decl-proto ec d)
+  (hash-ref (emit-context-decl->proto-pp ec) d))
+(define (pp:decl ec d)
+  (hash-ref (emit-context-decl->pp ec) d))
 
 (define-class $exe
   #:fields
@@ -1005,13 +1050,16 @@
       "~a.o"
       (λ (o)
         (define cc-pth (find-executable-path "cc"))
-        (apply system* cc-pth (append (emit-result-cflags er) (list c "-c" "-o" o)))
+        (or (apply system* cc-pth (append (emit-result-cflags er) (list c "-c" "-o" o)))
+            (error 'run "Failed to compile"))
         (call-with-temporary
          "~a.bin"
          (λ (b)
-           (apply system* cc-pth
-                  (append (list o) (emit-result-ldflags er) (list "-o" b)))
-           (system* b))))))))
+           (or (apply system* cc-pth
+                      (append (list o) (emit-result-ldflags er) (list "-o" b)))
+               (error 'run "Failed to link"))
+           (system* b)
+           (void))))))))
 (provide
  (contract-out
   [run (-> Unit? void?)]))
@@ -1034,6 +1082,7 @@
      (quasisyntax/loc stx
        ($%proc (or '#,(syntax-local-name) (gensym '$proc))
                (Fun (list vt ...) rt)
+               '(v ...)
                (λ (v ...)
                  (define-class-alias this-$ret ($ret/ty rt) #:no-provide)
                  (define-class-alias this-$return ($ret/ty rt #f) #:no-provide)
@@ -1082,7 +1131,7 @@
   (syntax-parse stx
     [(_ ([ty:expr n:id e:expr]) . b)
      (quasisyntax/loc stx
-       ($%let1 ty
+       ($%let1 'n ty
                #,(quasisyntax/loc stx
                    (λ (n)
                      ($seq ($set! n e)
@@ -1135,8 +1184,7 @@
            ($if ($<= n ($v UI64 0))
                 ($ret ($v UI64 1))
                 ($ret ($* n
-                          ($app fac-rec
-                                ($- n ($v UI64 1))))))))
+                          (fac-rec ($- n ($v UI64 1))))))))
   (define fac
     ($proc ([UI64 n]) UI64
            ($let1 ([UI64 acc ($v UI64 1)])
@@ -1149,11 +1197,12 @@
            (define (test-fac which fac)
              ($let1 ([UI64 r ($v UI64 0)])
                     ($for ([UI32 i ($in-range ($v UI32 10000))])
-                          ($set! r ($app fac ($v UI64 12))))
+                          ($set! r (fac ($v UI64 12))))
                     ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
            ($begin (test-fac "iter" fac)
                    (test-fac " rec" fac-rec)
                    ($ret ($v SI32 0)))))
   (define this
     ($default-flags ($exe main)))
+  (emit! this)
   (run this))
