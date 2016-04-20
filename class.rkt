@@ -120,7 +120,7 @@
         [(m^ ...)
          (for/list ([m (in-list (syntax->list #'(m ...)))])
            (datum->syntax
-            (syntax-local-introduce m)
+            #'iname
             (syntax->datum m)
             #'iname))])
        (syntax/loc stx

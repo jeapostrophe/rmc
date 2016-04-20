@@ -314,6 +314,7 @@
 ;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref $ife
 ;; $seal $unseal
 
+;; XXX Use Decl directly?
 (define-class $dref
   #:fields
   [d Decl?]
@@ -342,38 +343,40 @@
 (define (pp:op1 o a)
   (pp:h-append pp:lparen (pp:text o) ((Expr-pp a)) pp:rparen))
 
-;; XXX These seem macro-producible, but I get an error about pp not
-;; being bound.
+(define-syntax (define-op1-class stx)
+  (syntax-parse stx
+    [(_ name:id
+        #:ctc arg-ctc:expr
+        #:pp arg-pp:expr
+        #:ty arg-ty:expr)
+     (with-syntax ([arg (datum->syntax #'name 'arg)])
+       (syntax/loc stx
+         (define-class name
+           #:fields
+           [arg arg-ctc]
+           #:methods Expr
+           (define (pp) (pp:op1 arg-pp arg))
+           (define (ty) arg-ty)
+           (define (lval?) #f)
+           (define (h! !) ((Expr-h! arg) !)))))]))
 
-(define-class $!
-  #:fields
-  [arg (Expr/c Bool)]
-  #:methods Expr
-  (define (pp) (pp:op1 "!" arg))
-  (define (ty) Bool)
-  (define (lval?) #f)
-  (define (h! !) ((Expr-h! arg) !)))
+(define-op1-class $!
+  #:ctc (Expr/c Bool)
+  #:pp "!"
+  #:ty Bool)
 
-(define-class $neg
-  #:fields
-  [arg (or/c (Expr?/c "floating" Float?)
-             (Expr?/c "signed integer"
-                      (λ (x) (and (Int? x) (Int-signed? x)))))]
-  #:methods Expr
-  (define (pp) (pp:op1 "-" arg))
-  (define (ty) ((Expr-ty arg)))
-  (define (lval?) #f)
-  (define (h! !) ((Expr-h! arg) !)))
+(define-op1-class $neg
+  #:ctc (or/c (Expr?/c "floating" Float?)
+              (Expr?/c "signed integer"
+                       (λ (x) (and (Int? x) (Int-signed? x)))))
+  #:pp "-"
+  #:ty ((Expr-ty arg)))
 
-(define-class $bneg
-  #:fields
-  [arg (Expr?/c "unsigned integer"
-                (λ (x) (and (Int? x) (Int-unsigned? x))))]
-  #:methods Expr
-  (define (pp) (pp:op1 "~" arg))
-  (define (ty) ((Expr-ty arg)))
-  (define (lval?) #f)
-  (define (h! !) ((Expr-h! arg) !)))
+(define-op1-class $bneg
+  #:ctc (Expr?/c "unsigned integer"
+                (λ (x) (and (Int? x) (Int-unsigned? x))))
+  #:pp "~"
+  #:ty ((Expr-ty arg)))
 
 ;; XXX Op2: $/ $% $== $> $>= $and $or $band $bior
 ;; $bxor $bshl $bshr
