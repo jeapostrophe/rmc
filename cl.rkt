@@ -15,8 +15,9 @@
 ;;; General
 (require (prefix-in pp: pprint))
 
-;; XXX make sure string is okay
-(define CName? string?)
+(define (CName? x)
+  (and (string? x)
+       (regexp-match #rx"^[_a-zA-Z][_a-zA-Z0-9]*$" x)))
 
 (define-srcloc-struct CHeader
   [cflags (listof string?)]
