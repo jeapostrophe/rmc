@@ -53,7 +53,7 @@
    (-> any/c
        boolean?)]
   [pp:val
-   (-> any/c ;; XXX really should be val?
+   (-> any/c
        pp:doc?)])
 
 (define-class Any
@@ -84,7 +84,6 @@
   #:fields
   [lit string?]
   [v? (-> any/c boolean?)]
-  ;; XXX should be v?
   [ppv (-> any/c pp:doc?)]
   #:methods Type
   (define (name) lit)
@@ -232,7 +231,6 @@
 (define-class Seal*
   #:fields
   [v? (or/c #f (-> any/c boolean?))]
-  ;; XXX should be (if v? v? (Type-val? st))
   [ppv (-> any/c pp:doc?)]
   [tag symbol?] [st Type?]  
   #:methods Type
