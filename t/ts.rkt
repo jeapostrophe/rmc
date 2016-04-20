@@ -18,10 +18,37 @@
 ;; XXX Any Size Char Void UI8 UI16 UI32 UI32 UI64 SI8 SI16 SI32 SI64
 ;; F32 F64 Ptr Fun
 
-;; XXX $<= $< $!= $* $- $+
+;; XXX $* $- $+ $/ $% $and $or $band $bior $bxor $bshl $bshr
+
+;; XXX test $== and $!= on Ptrs
 
 (define TESTS
   (list
+   (let ()
+     (define-syntax-rule (FUN x)
+       (λ (a b) (x a b)))
+     (define (!= x y) (not (= x y)))
+     (define == =)
+     (for/list ([<= (in-list (list <= < > >=
+                                   != ==))]
+                [$<= (in-list (list (FUN $<=) (FUN $<) (FUN $>) (FUN $>=)
+                                    (FUN $!=) (FUN $==)))])
+       (define (<=-test TY L R)
+         (a-test ($let* ([UI8 i ($v UI8 0)]
+                         [TY l ($v TY L)])
+                        ($when ($<= l ($v TY R))
+                               ($set! i ($v UI8 1)))
+                        ($do ($printf ($v "%d\n") i)))
+                 (list (number->string (if (<= L R) 1 0)))))
+       (cons
+        (list (<=-test F64 4.0 16.0)
+              (<=-test F64 16.0 16.0)
+              (<=-test F64 16.0 4.0))
+        (for/list ([TY (in-list (list UI8 UI16 UI32 UI64
+                                      SI8 SI16 SI32 SI64))])
+          (list (<=-test TY 4 16)
+                (<=-test TY 16 16)
+                (<=-test TY 16 4))))))
    (let ()
      (define (bneg-test TY fmt max)
        (a-test ($let1 ([TY i ($bneg ($v TY 5))])

@@ -371,17 +371,28 @@
   #:pp "!"
   #:ty Bool)
 
+(define Int/c (Expr?/c "integer" Int?))
+
+(define Signed-Number/c
+  (or/c (Expr?/c "floating" Float?)
+        (Expr?/c "signed integer"
+                 (λ (x) (and (Int? x) (Int-signed? x))))))
+
+(define Unsigned-Int/c
+  (Expr?/c "unsigned integer"
+           (λ (x) (and (Int? x) (Int-unsigned? x)))))
+
+(define Number/c
+  (Expr?/c "number" Numeric?))
+
 (define-op1-class $neg
-  #:ctc (or/c (Expr?/c "floating" Float?)
-              (Expr?/c "signed integer"
-                       (λ (x) (and (Int? x) (Int-signed? x)))))
+  #:ctc Signed-Number/c
   #:pp "-"
   #:ty ((Expr-ty arg)))
 
 (define-class $bneg
   #:fields
-  [arg (Expr?/c "unsigned integer"
-                (λ (x) (and (Int? x) (Int-unsigned? x))))]
+  [arg Unsigned-Int/c]
   #:methods Expr
   (define arg-ty ((Expr-ty arg)))
   (define (pp)
@@ -394,9 +405,6 @@
   (define (ty) arg-ty)
   (define (lval?) #f)
   (define (h! !) ((Expr-h! arg) !)))
-
-;; XXX Op2: $/ $% $== $> $>= $and $or $band $bior
-;; $bxor $bshl $bshr
 
 (define (pp:op2 a o b)
   (pp:h-append pp:lparen ((Expr-pp a)) pp:space
@@ -425,32 +433,80 @@
              ((Expr-h! rhs) !)))))]))
 
 (define-op2-class $<=
-  #:lhs-ctc (Expr?/c "integer" Int?)
+  #:lhs-ctc Number/c
   #:pp "<="
   #:ty Bool)
 
 (define-op2-class $<
-  #:lhs-ctc (Expr?/c "integer" Int?)
+  #:lhs-ctc Number/c
   #:pp "<"
   #:ty Bool)
 
+(define-op2-class $>=
+  #:lhs-ctc Number/c
+  #:pp ">="
+  #:ty Bool)
+
+(define-op2-class $>
+  #:lhs-ctc Number/c
+  #:pp ">"
+  #:ty Bool)
+
 (define-op2-class $!=
-  #:lhs-ctc (or/c (Expr?/c "number" Numeric?)
+  #:lhs-ctc (or/c Number/c
                   (Expr?/c "pointer" Ptr?))
   #:pp "!="
   #:ty Bool)
 
+(define-op2-class $==
+  #:lhs-ctc (or/c Number/c
+                  (Expr?/c "pointer" Ptr?))
+  #:pp "=="
+  #:ty Bool)
+
 (define-op2-class $*
-  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:lhs-ctc Number/c
   #:pp "*")
 
 (define-op2-class $-
-  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:lhs-ctc Number/c
   #:pp "-")
 
 (define-op2-class $+
-  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:lhs-ctc Number/c
   #:pp "+")
+
+(define-op2-class $/
+  #:lhs-ctc Number/c
+  #:pp "/")
+
+(define-op2-class $%
+  #:lhs-ctc Int/c
+  #:pp "%")
+
+(define-op2-class $band
+  #:lhs-ctc Unsigned-Int/c
+  #:pp "&")
+(define-op2-class $bior
+  #:lhs-ctc Unsigned-Int/c
+  #:pp "|")
+(define-op2-class $bxor
+  #:lhs-ctc Unsigned-Int/c
+  #:pp "^")
+
+(define-op2-class $and
+  #:lhs-ctc (Expr/c Bool)
+  #:pp "&&")
+(define-op2-class $or
+  #:lhs-ctc (Expr/c Bool)
+  #:pp "||")
+
+(define-op2-class $bshl
+  #:lhs-ctc Unsigned-Int/c
+  #:pp "<<")
+(define-op2-class $bshr
+  #:lhs-ctc Unsigned-Int/c
+  #:pp ">>")
 
 (define-class $val
   #:fields
@@ -1018,6 +1074,7 @@
 (define ($default-flags u)
   ($cflags '("-Wall" "-Wextra" "-Weverything" "-Wpedantic" "-Wshadow"
              "-Wstrict-overflow" "-fno-strict-aliasing"
+             "-Wno-parentheses-equality"
              "-Wno-unused-parameter" "-Wno-unused-function"
              "-Werror" "-pedantic" "-std=c99" "-O3" "-march=native"
              "-fno-stack-protector" "-ffunction-sections" "-fdata-sections"
