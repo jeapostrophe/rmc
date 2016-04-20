@@ -348,7 +348,7 @@
     [(_ name:id
         #:ctc arg-ctc:expr
         #:pp arg-pp:expr
-        #:ty arg-ty:expr)
+        #:ty res-ty:expr)
      (with-syntax ([arg (datum->syntax #'name 'arg)])
        (syntax/loc stx
          (define-class name
@@ -356,7 +356,7 @@
            [arg arg-ctc]
            #:methods Expr
            (define (pp) (pp:op1 arg-pp arg))
-           (define (ty) arg-ty)
+           (define (ty) res-ty)
            (define (lval?) #f)
            (define (h! !) ((Expr-h! arg) !)))))]))
 
@@ -386,80 +386,54 @@
                (pp:text o) pp:space
                ((Expr-pp b)) pp:rparen))
 
-;; XXX These should be macro applications
+(define-syntax (define-op2-class stx)
+  (syntax-parse stx
+    [(_ name:id
+        #:lhs-ctc lhs-ctc:expr
+        #:pp arg-pp:expr
+        (~optional (~seq #:ty res-ty:expr)
+                   #:defaults ([res-ty #'((Expr-ty lhs))])))
+     (with-syntax ()
+       (syntax/loc stx
+         (define-class name
+           #:fields
+           [lhs lhs-ctc]
+           [rhs (Expr/c ((Expr-ty lhs)))]
+           #:methods Expr
+           (define (pp) (pp:op2 lhs arg-pp rhs))
+           (define (ty) res-ty)
+           (define (lval?) #f)
+           (define (h! !)
+             ((Expr-h! lhs) !)
+             ((Expr-h! rhs) !)))))]))
 
-(define-class $<=
-  #:fields
-  [lhs (Expr?/c "integer" Int?)]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "<=" rhs))
-  (define (ty) Bool)
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $<=
+  #:lhs-ctc (Expr?/c "integer" Int?)
+  #:pp "<="
+  #:ty Bool)
 
-(define-class $<
-  #:fields
-  [lhs (Expr?/c "integer" Int?)]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "<" rhs))
-  (define (ty) Bool)
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $<
+  #:lhs-ctc (Expr?/c "integer" Int?)
+  #:pp "<"
+  #:ty Bool)
 
-(define-class $!=
-  #:fields
-  [lhs (or/c (Expr?/c "number" Numeric?)
-             (Expr?/c "pointer" Ptr?))]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "!=" rhs))
-  (define (ty) Bool)
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $!=
+  #:lhs-ctc (or/c (Expr?/c "number" Numeric?)
+                  (Expr?/c "pointer" Ptr?))
+  #:pp "!="
+  #:ty Bool)
 
-(define-class $*
-  #:fields
-  [lhs (Expr?/c "number" Numeric?)]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "*" rhs))
-  (define (ty) ((Expr-ty lhs)))
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $*
+  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:pp "*")
 
-(define-class $-
-  #:fields
-  [lhs (Expr?/c "number" Numeric?)]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "-" rhs))
-  (define (ty) ((Expr-ty lhs)))
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $-
+  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:pp "-")
 
-(define-class $+
-  #:fields
-  [lhs (Expr?/c "number" Numeric?)]
-  [rhs (Expr/c ((Expr-ty lhs)))]
-  #:methods Expr
-  (define (pp) (pp:op2 lhs "+" rhs))
-  (define (ty) ((Expr-ty lhs)))
-  (define (lval?) #f)
-  (define (h! !)
-    ((Expr-h! lhs) !)
-    ((Expr-h! rhs) !)))
+(define-op2-class $+
+  #:lhs-ctc (Expr?/c "number" Numeric?)
+  #:pp "+")
 
 (define-class $val
   #:fields
