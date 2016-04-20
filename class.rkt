@@ -86,14 +86,33 @@
              [name-m (-> name? ctc)]
              ...)))))]))
 
+(define-syntax (make-interface-record stx)
+  (syntax-parse stx
+    [(_ iname)
+     #:declare iname (static interface-info? "interface")
+     (with-syntax*
+       ([(_inst:name ([m _inst:name-m] ...))
+         (interface-info-stx (attribute iname.value))]
+        [(m^ ...)
+         (for/list ([m (in-list (syntax->list #'(m ...)))])
+           (datum->syntax
+            #'iname
+            (syntax->datum m)
+            #'iname))])
+       (syntax/loc stx
+         (cons
+          _inst:name
+          (make-immutable-hasheq
+           (list (cons _inst:name-m m^)
+                 ...)))))]))
+
 (define-syntax (define-class stx)
   (syntax-parse stx
     [(_ name:id
         #:fields [f:id f-ctc:expr] ...
         (~optional (~seq #:procedure proc:id))
-        (~seq #:methods iname
-              idef:expr ...))
-     #:declare iname (static interface-info? "interface")
+        (~seq #:methods iname:id) ...
+        idef:expr ...)
      (with-syntax*
        ([(n ...) (generate-temporaries #'(f ...))]
         [maybe-proc
@@ -114,15 +133,7 @@
         [_name-fields (format-id #'name-fields "_~a" #'name-fields)]
         [(_name-fields-f ...)
          (for/list ([f (in-list (syntax->list #'(f ...)))])
-           (format-id #'_name-fields "~a-~a" #'_name-fields f))]
-        [(_inst:name ([m _inst:name-m] ...))
-         (interface-info-stx (attribute iname.value))]
-        [(m^ ...)
-         (for/list ([m (in-list (syntax->list #'(m ...)))])
-           (datum->syntax
-            #'iname
-            (syntax->datum m)
-            #'iname))])
+           (format-id #'_name-fields "~a-~a" #'_name-fields f))])
        (syntax/loc stx
          (begin
            (define (make-name-object fields)
@@ -131,11 +142,8 @@
              (name-object
               (make-immutable-hasheq
                (list
-                (cons
-                 _inst:name
-                 (make-immutable-hasheq
-                  (list (cons _inst:name-m m^)
-                        ...)))))
+                (make-interface-record iname)
+                ...))
               fields))
            (define-srcloc-struct name-fields [f f-ctc] ...)
            (struct name-object object ()
