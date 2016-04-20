@@ -28,6 +28,8 @@
 (define this
   ($default-flags ($exe main)))
 
+(provide fac)
+
 (module+ test
   (require rackunit
            racket/string)

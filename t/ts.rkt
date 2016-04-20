@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../cl.rkt"
          "../h/libc.rkt"
+         "fac.rkt"
          racket/list)
 
 (struct a-test* (stmt-f output))
@@ -15,19 +16,40 @@
        ((a-test*-stmt-f tt))])))
 
 ;; XXX Any Size Char Void UI8 UI16 UI32 UI32 UI64 SI8 SI16 SI32 SI64
-;; F32 F64 Ptr Fun Seal String
+;; F32 F64 Ptr Fun
 
-;; XXX $! $neg $bneg $<= $< $!= $* $- $+
-
-;; XXX $ret/ty
-
-;; XXX $while
+;; XXX $<= $< $!= $* $- $+
 
 (define TESTS
   (list
+   (let ()
+     (define (bneg-test TY fmt max)
+       (a-test ($let1 ([TY i ($bneg ($v TY 5))])
+                      ($do ($printf ($v fmt) i)))
+               (list (number->string (- (- max 1) 5)))))
+     (list (bneg-test  UI8 "%hhu\n" (expt 2  8))
+           (bneg-test UI16  "%hu\n" (expt 2 16))
+           (bneg-test UI32   "%u\n" (expt 2 32))
+           (bneg-test UI64 "%llu\n" (expt 2 64))))
+   (a-test ($do ($printf ($v "%d\n") ($neg ($v SI32 5))))
+           '("-5"))
+   (a-test ($do ($printf ($v "%d\n") ($neg ($v SI32 -5))))
+           '("5"))
+   (a-test ($do ($printf ($v "%llu\n") (fac ($v UI64 12))))
+           '("479001600"))
    (a-test ($let1 ([String fmt ($v "Hello World!\n")])
-                  ($do ($printf fmt)))
-           "Hello World!")
+                  ($do ($printf ($v "%s") fmt)))
+           '("Hello World!"))
+   (let ()
+     (define (bool-test B)
+       (a-test ($let1 ([Bool b ($v B)])
+                      ($if ($! b)
+                           ($do ($printf ($v "Yes\n")))
+                           ($do ($printf ($v "No\n")))))
+               (list (if (not B) "Yes" "No"))))
+     (list
+      (bool-test #t)
+      (bool-test #f)))
    (let ()
      (define (bool-test B)
        (a-test ($let1 ([Bool b ($v B)])

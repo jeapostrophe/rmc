@@ -190,7 +190,7 @@
   (define (h! !) ((Type-h! st) !))
   (define (eq t)
     (and (Ptr? t)
-         ((Type-eq st) t)))
+         ((Type-eq st) (Ptr-st t))))
   (define (val? x) ($NULL? x))
   (define (pp:val v)
     (pp:text "NULL")))
@@ -304,8 +304,8 @@
                  x
                  (raise-blame-error
                   b x
-                  '(expected: "~a" given: "Expr(~e) with type ~e")
-                  name x xt)))
+                  '(expected: "~a" given: "Expr(~e) with type ~a")
+                  name x ((Type-name xt)))))
            (raise-blame-error
             b x
             '(expected: "~a" given: "~e")
@@ -378,11 +378,22 @@
   #:pp "-"
   #:ty ((Expr-ty arg)))
 
-(define-op1-class $bneg
-  #:ctc (Expr?/c "unsigned integer"
-                (λ (x) (and (Int? x) (Int-unsigned? x))))
-  #:pp "~"
-  #:ty ((Expr-ty arg)))
+(define-class $bneg
+  #:fields
+  [arg (Expr?/c "unsigned integer"
+                (λ (x) (and (Int? x) (Int-unsigned? x))))]
+  #:methods Expr
+  (define arg-ty ((Expr-ty arg)))
+  (define (pp)
+    (define arg-ty-pp
+      (pp:h-append pp:lparen ((Type-pp arg-ty) #:name #f #:ptrs 0) pp:rparen))
+    (pp:h-append arg-ty-pp
+                 pp:lparen (pp:text "~")
+                 pp:lparen arg-ty-pp ((Expr-pp arg)) pp:rparen
+                 pp:rparen))
+  (define (ty) arg-ty)
+  (define (lval?) #f)
+  (define (h! !) ((Expr-h! arg) !)))
 
 ;; XXX Op2: $/ $% $== $> $>= $and $or $band $bior
 ;; $bxor $bshl $bshr
@@ -446,7 +457,10 @@
   [vty Type?]
   [val (Type-val? vty)]
   #:methods Expr
-  (define (pp) ((Type-pp:val vty) val))
+  (define (pp) (pp:h-append pp:lparen
+                            ;; pp:lparen ((Type-pp vty) #:name #f #:ptrs 0) pp:rparen
+                            ((Type-pp:val vty) val)
+                            pp:rparen))
   (define (ty) vty)
   (define (lval?) #f)
   (define (h! !)
