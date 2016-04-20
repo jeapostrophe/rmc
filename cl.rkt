@@ -238,10 +238,10 @@
 (define-class Seal*
   #:fields
   [v? (or/c #f (-> any/c boolean?))]
-  [ppv (-> any/c pp:doc?)]
+  [ppv (or/c #f (-> any/c pp:doc?))]
   [tag symbol?] [st Type?]  
   #:methods Type
-  (define (name) (format "~a(~a)" tag ((Type-name st))))
+  (define (name) (format "~a<~a>" tag ((Type-name st))))
   (define (pp #:name n #:ptrs p)
     ((Type-pp st) #:name n #:ptrs p))
   (define (h! !)
@@ -318,7 +318,29 @@
                                 ((Expr-lval? x))))))
 
 ;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref $ife
-;; $seal $unseal
+
+(define-class $seal
+  #:fields
+  [s symbol?]
+  [e Expr?]
+  #:methods Expr
+  (define (pp) ((Expr-pp e)))
+  (define (ty) (Seal s ((Expr-ty e))))
+  (define (lval?) #f)
+  (define (h! !) ((Expr-h! e) !)))
+
+(define-class $unseal
+  #:fields
+  [s symbol?]
+  [e (Expr?/c (format "sealed with ~a" s)
+              (λ (x)
+                (and (Seal*? x)
+                     (eq? s (Seal*-tag x)))))]
+  #:methods Expr
+  (define (pp) ((Expr-pp e)))
+  (define (ty) (Seal*-st ((Expr-ty e))))
+  (define (lval?) #f)
+  (define (h! !) ((Expr-h! e) !)))
 
 (define-class $dref
   #:fields

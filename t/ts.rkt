@@ -24,6 +24,12 @@
 
 (define TESTS
   (list
+   (a-test ($do ($printf ($v "%u\n")
+                         ($seal 'MPH ($v UI32 19))))
+           '("19"))
+   (a-test ($do ($printf ($v "%u\n")
+                         ($+ ($v UI32 1) ($unseal 'MPH ($seal 'MPH ($v UI32 19))))))
+           '("20"))
    (let ()
      (define-syntax-rule (FUN x)
        (λ (a b) (x a b)))
