@@ -790,6 +790,7 @@
 (define (pp:decl ec d)
   (hash-ref (emit-context-decl->pp ec) d))
 
+;; XXX Add a $lib for linking with Racket?
 (define-class $exe
   #:fields
   [main $%proc?]
