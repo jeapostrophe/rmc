@@ -320,12 +320,12 @@
 ;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref $ife
 ;; $seal $unseal
 
-;; XXX Use Decl directly?
 (define-class $dref
   #:fields
   [d Decl?]
   #:methods Expr
-  (define ec (current-ec))
+  (define ec (or (current-ec)
+                 (error '$dref "Cannot reference declaration outside of emit")))
   (ec-add-decl! ec d #f)
   (define (pp) (pp:text (hash-ref (emit-context-decl->name ec) d)))
   (define (ty) (hash-ref (emit-context-decl->ty ec) d))
