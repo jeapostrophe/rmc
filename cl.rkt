@@ -157,12 +157,19 @@
          (= bits (Float-bits t))))
   (define (val? x)
     ((match bits
+       ;; XXX basically nothing is a single flonum
        [32 single-flonum?]
        [64 double-flonum?])
      x))
   (define (pp:val v)
-    ;; XXX what if number->string doesn't include "."
-    (pp:h-append (pp:text (number->string v))
+    (pp:h-append (pp:text
+                  ;; XXX It would be nice if this would never fail.
+                  (contract
+                   (λ (x)
+                     (regexp-match #rx"^[-+]?[0-9]+\\.[0-9]+$"
+                                   x))
+                   (number->string v)
+                   'racket 'racket))
                  (match bits
                    [32 (pp:text "f")]
                    [64 pp:empty]))))
