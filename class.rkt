@@ -111,8 +111,9 @@
     [(_ name:id
         #:fields [f:id f-ctc:expr] ...
         (~optional (~seq #:procedure proc:id))
-        (~seq #:methods iname:id) ...
-        idef:expr ...)
+        (~seq #:methods iname:id
+              idef:expr ...)
+        ...)
      (with-syntax*
        ([(n ...) (generate-temporaries #'(f ...))]
         [maybe-proc
@@ -138,11 +139,12 @@
          (begin
            (define (make-name-object fields)
              (match-define (_name-fields srcloc f ...) fields)
-             idef ...
              (name-object
               (make-immutable-hasheq
                (list
-                (make-interface-record iname)
+                (let ()
+                  idef ...
+                  (make-interface-record iname))
                 ...))
               fields))
            (define-srcloc-struct name-fields [f f-ctc] ...)
