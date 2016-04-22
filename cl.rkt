@@ -141,6 +141,39 @@
 (define-class-alias SI32 (Int #t 32))
 (define-class-alias SI64 (Int #t 64))
 
+;; XXX Doesn't work with de-normalized
+(define (float->cliteral bits x)
+  (define size
+    (match bits
+      [32 4]
+      [64 8]))
+  (define fbs (real->floating-point-bytes x size #t))
+  (define n (integer-bytes->integer fbs #f #t))
+  (define-values (sign exp sig)
+    (match bits
+      [32 (values (bitwise-bit-field n 31 32)
+                  (- (bitwise-bit-field n 23 31) 127)
+                  (bitwise-bit-field n 0 23))]
+      [64 (values (bitwise-bit-field n 63 64)
+                  (- (bitwise-bit-field n 52 63) 1023)
+                  (bitwise-bit-field n 0 52))]))
+  (format "0x1.~ap~a~a~a"
+          (number->string sig 16)
+          (if (= sign 0) "+" "-")
+          (number->string exp 10)
+          (match bits
+            [32 "f"]
+            [64 ""])))
+(module+ test
+  (float->cliteral 32 3.0f0)
+  (float->cliteral 64 3.0)
+  (float->cliteral 32 -3.0f0)
+  (float->cliteral 64 -3.0)
+  (float->cliteral 32 64.0f0)
+  (float->cliteral 64 64.0)
+  (float->cliteral 32 -64.0f0)
+  (float->cliteral 64 -64.0))
+
 (define-class Float
   #:fields
   [bits (one-of/c 32 64)]
@@ -157,19 +190,11 @@
          (= bits (Float-bits t))))
   (define (val? x)
     ((match bits
-       ;; XXX basically nothing is a single flonum
        [32 single-flonum?]
        [64 double-flonum?])
      x))
   (define (pp:val v)
-    (pp:h-append (pp:text
-                  ;; XXX It would be nice if this would never fail.
-                  (contract
-                   (λ (x)
-                     (regexp-match #rx"^[-+]?[0-9]+\\.[0-9]+$"
-                                   x))
-                   (number->string v)
-                   'racket 'racket))
+    (pp:h-append (pp:text (real->decimal-string v bits))
                  (match bits
                    [32 (pp:text "f")]
                    [64 pp:empty]))))
@@ -319,6 +344,25 @@
 
 ;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref
 
+;; XXX Generalize this to allow expanding/shrinking ints
+(define-class $cast
+  #:fields
+  [t (Type-eq F64)]
+  [e (Expr/c F32)]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append pp:lparen
+                 pp:lparen
+                 ((Type-pp t) #:name #f #:ptrs 0)
+                 pp:rparen
+                 ((Expr-pp e))
+                 pp:rparen))
+  (define (ty) t)
+  (define (lval?) #f)
+  (define (h! !)
+    ((Type-h! t) !)
+    ((Expr-h! e) !)))
+
 (define-class $ife
   #:fields
   [c (Expr/c Bool)]
@@ -368,7 +412,7 @@
   #:fields
   [d Decl?]
   #:methods Expr
-  ;; XXX Put this somewhere else?
+  ;; XXX This is the ugliest part.
   (define ec (or (current-ec)
                  (error '$dref "Cannot reference declaration outside of emit")))
   (ec-add-decl! ec d #f)

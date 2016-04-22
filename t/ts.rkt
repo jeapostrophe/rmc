@@ -21,11 +21,16 @@
 (define-syntax-rule (FUN x)
   (λ (a b) (x a b)))
 
-(define (test-$op X Y TY TYp $op op #:F [F number->string])
+(define (test-$op X Y TY TYp $op op
+                  #:CAST [C #f]
+                  #:F [F number->string])
   (a-test ($let* ([TY x ($v TY X)]
                   [TY y ($v TY Y)]
                   [TY z ($op x y)])
-                 ($do ($printf ($v (string-append TYp "\n")) z)))
+                 ($do ($printf ($v (string-append TYp "\n"))
+                               (if C
+                                   ($cast C z)
+                                   z))))
           (list (F (op X Y)))))
 
 (define TESTS
@@ -48,13 +53,14 @@
                 [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"))])  
        (test-$op 13 4 TY TYp $op op)))
    (let ()
-     (define X 8.0)
-     (define Y 6.0)
-     ;; XXX Add F32
-     (for/list ([TY (in-list (list F64))])
+     (for/list ([TY (in-list (list F32 F64))]
+                [X (in-list (list 8f0 8.0))]
+                [Y (in-list (list 6f0 6.0))])
        (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
                   [op (in-list (list * - + /))])
-         (test-$op X Y TY "%.4f" $op op #:F (λ (x) (real->decimal-string x 4))))))
+         (test-$op X Y TY "%.4f" $op op
+                   #:CAST (if (single-flonum? X) F64 #f)
+                   #:F (λ (x) (real->decimal-string x 4))))))
    (let ()
      (define X 8)
      (define Y 6)
