@@ -342,7 +342,7 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $pref $sref $uref
+;; XXX Exprs: $sizeof $offsetof $aref $fref
 
 (define-class $&
   #:fields
@@ -669,6 +669,7 @@
 
 (define-class $%app
   #:fields
+  ;; XXX or ptr to Fun
   [rator (Expr?/c "function" Fun?)]
   [rands
    (let ([rator-ty ((Expr-ty rator))])

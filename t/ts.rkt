@@ -20,18 +20,6 @@
 (define-syntax-rule (FUN x)
   (λ (a b) (x a b)))
 
-(define (test-$op X Y TY TYp $op op
-                  #:CAST [C #f]
-                  #:F [F number->string])
-  (a-test ($let* ([TY x ($v TY X)]
-                  [TY y ($v TY Y)]
-                  [TY z ($op x y)])
-                 ($do ($printf ($v (string-append TYp "\n"))
-                               (if C
-                                   ($cast C z)
-                                   z))))
-          (list (F (op X Y)))))
-
 (define TESTS
   (list
    (a-test ($let* ([UI8 i ($v UI8 32)]
@@ -54,7 +42,7 @@
                   ($do ($printf ($v "%d\n")
                                 ($ife ($== ($@ ip1) ($@ kp)) ($v UI8 1) ($v UI8 0)))))
            (list "1" "0" "0" "1" "1" "0"))
-   
+
    (for/list ([$op (in-list (list (FUN $and) (FUN $or)))]
               [op (in-list (list (FUN and) (FUN or)))])
      (for*/list ([x (in-list '(#t #f))]
@@ -63,34 +51,47 @@
                              ($ife ($op ($v x) ($v y))
                                    ($v UI8 42)
                                    ($v UI8 32))))
-               (list (if (op x y) 42 32)))))   
-   (for/list ([$op (in-list (list (FUN $%) (FUN $band) (FUN $bior) (FUN $bxor)
-                                  (FUN $bshl) (FUN $bshr)))]
-              [op (in-list (list modulo bitwise-and bitwise-ior bitwise-xor
-                                 arithmetic-shift
-                                 (λ (x y) (arithmetic-shift x (* -1 y)))))])
-     (for/list ([TY (in-list (list UI8 UI16 UI32 UI64))]
-                [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"))])  
-       (test-$op 13 4 TY TYp $op op)))
+               (list (if (op x y) 42 32)))))
    (let ()
-     (for/list ([TY (in-list (list F32 F64))]
-                [X (in-list (list 8f0 8.0))]
-                [Y (in-list (list 6f0 6.0))])
-       (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
-                  [op (in-list (list * - + /))])
-         (test-$op X Y TY "%.4f" $op op
-                   #:CAST (if (single-flonum? X) F64 #f)
-                   #:F (λ (x) (real->decimal-string x 4))))))
-   (let ()
-     (define X 8)
-     (define Y 6)
-     (for/list ([TY (in-list (list UI8 UI16 UI32 UI64
-                                   SI8 SI16 SI32 SI64))]
-                [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"
-                                    "%hhd" "%hd" "%d" "%lld"))])
-       (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
-                  [op (in-list (list * - + quotient))])
-         (test-$op X Y TY TYp $op op))))
+     (define (test-$op X Y TY TYp $op op
+                       #:CAST [C #f]
+                       #:F [F number->string])
+       (a-test ($let* ([TY x ($v TY X)]
+                       [TY y ($v TY Y)]
+                       [TY z ($op x y)])
+                      ($do ($printf ($v (string-append TYp "\n"))
+                                    (if C
+                                        ($cast C z)
+                                        z))))
+               (list (F (op X Y)))))
+     (list
+      (for/list ([$op (in-list (list (FUN $%) (FUN $band) (FUN $bior) (FUN $bxor)
+                                     (FUN $bshl) (FUN $bshr)))]
+                 [op (in-list (list modulo bitwise-and bitwise-ior bitwise-xor
+                                    arithmetic-shift
+                                    (λ (x y) (arithmetic-shift x (* -1 y)))))])
+        (for/list ([TY (in-list (list UI8 UI16 UI32 UI64))]
+                   [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"))])
+          (test-$op 13 4 TY TYp $op op)))
+      (let ()
+        (for/list ([TY (in-list (list F32 F64))]
+                   [X (in-list (list 8f0 8.0))]
+                   [Y (in-list (list 6f0 6.0))])
+          (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+                     [op (in-list (list * - + /))])
+            (test-$op X Y TY "%.4f" $op op
+                      #:CAST (if (single-flonum? X) F64 #f)
+                      #:F (λ (x) (real->decimal-string x 4))))))
+      (let ()
+        (define X 8)
+        (define Y 6)
+        (for/list ([TY (in-list (list UI8 UI16 UI32 UI64
+                                      SI8 SI16 SI32 SI64))]
+                   [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"
+                                       "%hhd" "%hd" "%d" "%lld"))])
+          (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+                     [op (in-list (list * - + quotient))])
+            (test-$op X Y TY TYp $op op))))))
    (a-test ($do ($printf ($v "%u\n")
                          ($seal 'MPH ($v UI32 19))))
            '("19"))
