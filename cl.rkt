@@ -449,7 +449,7 @@
   (ec-add-decl! ec d #f)
   (define (pp) (pp:text (hash-ref (emit-context-decl->name ec) d)))
   (define (ty) (hash-ref (emit-context-decl->ty ec) d))
-  (define (lval?) #f)
+  (define (lval?) #t)
   (define (h! !) (void)))
 
 (define-class Var
@@ -667,15 +667,25 @@
   (define (h! !)
     ((Type-h! vty) !)))
 
+(define (Fun-args/c f)
+  (apply list/c (map Expr/c (Fun-dom f))))
+
 (define-class $%app
   #:fields
-  ;; XXX or ptr to Fun
-  [rator (Expr?/c "function" Fun?)]
+  [rator (or/c (Expr?/c "function" Fun?)
+               (Expr?/c "function ptr"
+                        (λ (x)
+                          (and (Ptr? x)
+                               (Fun? (Ptr-st x))))))]
   [rands
    (let ([rator-ty ((Expr-ty rator))])
-     (if (Any? rator-ty)
-         (listof Expr?)
-         (apply list/c (map Expr/c (Fun-dom rator-ty)))))]
+     (cond
+       [(Any? rator-ty)
+        (listof Expr?)]
+       [(Fun? rator-ty)
+        (Fun-args/c rator-ty)]
+       [(Ptr? rator-ty)
+        (Fun-args/c (Ptr-st rator-ty))]))]
   #:methods Expr
   (define (pp)
     (pp:h-append ((Expr-pp rator)) pp:lparen
@@ -685,9 +695,13 @@
                  pp:rparen))
   (define (ty)
     (define rator-ty ((Expr-ty rator)))
-    (if (Any? rator-ty)
-        Any
-        (Fun-rng rator-ty)))
+    (cond
+      [(Any? rator-ty)
+       Any]
+      [(Fun? rator-ty)
+       (Fun-rng rator-ty)]
+      [(Ptr? rator-ty)
+       (Fun-rng (Ptr-st rator-ty))]))
   (define (lval?) #f)
   (define (h! !)
     ((Expr-h! rator) !)
@@ -1226,7 +1240,9 @@
   ($cflags '("-Wall" "-Wextra" "-Weverything" "-Wpedantic" "-Wshadow"
              "-Wstrict-overflow" "-fno-strict-aliasing"
              "-Wno-parentheses-equality"
-             "-Wno-unused-parameter" "-Wno-unused-function"
+             #;"-Wno-unused-parameter"
+             "-Wno-unused-function"
+             "-Wno-tautological-compare"
              "-Werror" "-pedantic" "-std=c99" "-O3" "-march=native"
              "-fno-stack-protector" "-ffunction-sections" "-fdata-sections"
              "-fno-unwind-tables" "-fno-asynchronous-unwind-tables" "-fno-math-errno"

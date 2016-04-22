@@ -6,13 +6,38 @@
 (struct a-test* (stmt-f output))
 (define-syntax-rule (a-test stmt output) (a-test* (λ () stmt) output))
 
-;; XXX test function pointers
-
 (define-syntax-rule (FUN x)
   (λ (a b) (x a b)))
 
 (define TESTS
   (list
+   (let ()
+     (define add2
+       ($proc ([UI8 a]) UI8
+              ($ret ($+ a ($v UI8 2)))))
+     (define add3
+       ($proc ([UI8 a]) UI8
+              ($ret ($+ a ($v UI8 3)))))
+     (a-test
+      ($let* ([(Ptr (Fun (list UI8) UI8))
+               f ($& ($dref add2))]
+              [(Ptr (Fun (list UI8) UI8))
+               g ($& ($dref add3))]
+              [UI8 two ($v UI8 2)])
+             ($do ($printf ($v "%u\n") (add2 two)))
+             ($do ($printf ($v "%u\n") ($app ($@ f) two)))
+             ($do ($printf ($v "%u\n") ($app f two)))
+             ($do ($printf ($v "%u\n") (add3 two)))
+             ($do ($printf ($v "%u\n") ($app ($@ g) two)))
+             ($do ($printf ($v "%u\n") ($app g two)))
+             ($do ($printf ($v "%d\n")
+                           ($ife ($== f f) ($v UI8 1) ($v UI8 0))))
+             ($do ($printf ($v "%d\n")
+                           ($ife ($== f g) ($v UI8 1) ($v UI8 0)))))
+      (list "4" "4" "4"
+            "5" "5" "5"
+            "1" "0")))
+
    (a-test ($let* ([UI8 i ($v UI8 32)]
                    [UI8 j ($v UI8 32)]
                    [UI8 k ($v UI8 33)]
