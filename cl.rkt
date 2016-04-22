@@ -1102,8 +1102,8 @@
                (local-require racket/port)
                (define cpt (thread (λ () (copy-port stdout bs-stdout))))
                (subprocess-wait sp)
-               (close-input-port stdout)
                (thread-wait cpt)
+               (close-input-port stdout)               
                (get-output-string bs-stdout))))
 
 (provide

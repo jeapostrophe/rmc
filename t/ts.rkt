@@ -1,19 +1,10 @@
 #lang racket/base
 (require "../cl.rkt"
          "../h/libc.rkt"
-         "fac.rkt"
-         racket/list)
+         "fac.rkt")
 
 (struct a-test* (stmt-f output))
 (define-syntax-rule (a-test stmt output) (a-test* (λ () stmt) output))
-(define (run-tests tt)
-  (let loop ([tt tt])
-    (cond
-      [(null? tt) $nop]
-      [(pair? tt) ($seq (loop (car tt))
-                        (loop (cdr tt)))]
-      [else
-       ((a-test*-stmt-f tt))])))
 
 ;; XXX test function pointers
 
@@ -194,41 +185,47 @@
                   ($do ($printf ($v "%d\n") i)))
            '("24"))))
 
-(define main
-  ($proc () SI32
-         ($begin
-          (run-tests TESTS)
-          ($ret ($v SI32 0)))))
-
-(define this
-  ($default-flags ($exe main)))
-
 (module+ test
-  (require rackunit
+  (require "../check.rkt"
            racket/string)
-  (emit! this)
 
-  (void
-   (let loop ([out (string-split (run&capture this) "\n")]
-              [tt TESTS])
-     (cond
-       [(null? tt) out]
-       [(pair? tt) (loop (loop out (car tt))
-                         (cdr tt))]
-       [else
-        (for/fold ([out out])
-                  ([o (in-list (a-test*-output tt))])
-          (check-pred pair? out)
-          (cond
-            [(pair? out)
-             (define fo (first out))
-             (cond
-               [(string? o)
-                (check-equal? fo o)]
-               [(number? o)
-                (check-equal? (string->number fo) o)]
-               [else
-                (error 'test)])
-             (rest out)]
-            [else
-             out]))]))))
+  (define (walk-tree f tt)
+    (cond [(null? tt) (void)]
+          [(pair? tt)
+           (walk-tree f (car tt))
+           (walk-tree f (cdr tt))]
+          [else
+           (f tt)]))
+
+  (define (run-a-test t)
+    (define main
+      ($proc () SI32
+             ($begin
+              ((a-test*-stmt-f t))
+              ($ret ($v SI32 0)))))
+
+    (define this
+      ($default-flags ($exe main)))
+
+    (define emit? #f)
+    (define actual-out (string-split (run&capture this) "\n"))
+    (define expected-out (a-test*-output t))
+
+    (with-check-details ([check-inform (λ () (set! emit? #t))])
+      (check (length actual-out) (length expected-out))
+      (for ([a (in-list actual-out)]
+            [e (in-list expected-out)])
+        (cond
+          [(string? e)
+           (check a e)]
+          [(number? e)
+           (check (string->number a) e)]
+          [else
+           (with-check-details (['name "invalid expected"]
+                                ['v (format "~e" e)])
+             (check #f))])))
+
+    (when emit?
+      (emit! this)))
+
+  (walk-tree run-a-test TESTS))
