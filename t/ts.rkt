@@ -15,15 +15,56 @@
       [else
        ((a-test*-stmt-f tt))])))
 
-;; XXX Any Size Char Void UI8 UI16 UI32 UI32 UI64 SI8 SI16 SI32 SI64
-;; F32 F64 Ptr Fun
-
-;; XXX $* $- $+ $/ $% $and $or $band $bior $bxor $bshl $bshr
-
+;; XXX test function pointers
 ;; XXX test $== and $!= on Ptrs
+
+(define-syntax-rule (FUN x)
+  (λ (a b) (x a b)))
+
+(define (test-$op X Y TY TYp $op op #:F [F number->string])
+  (a-test ($let* ([TY x ($v TY X)]
+                  [TY y ($v TY Y)]
+                  [TY z ($op x y)])
+                 ($do ($printf ($v (string-append TYp "\n")) z)))
+          (list (F (op X Y)))))
 
 (define TESTS
   (list
+   (for/list ([$op (in-list (list (FUN $and) (FUN $or)))]
+              [op (in-list (list (FUN and) (FUN or)))])
+     (for*/list ([x (in-list '(#t #f))]
+                 [y (in-list '(#t #f))])
+       (a-test ($do ($printf ($v "%u\n")
+                             ($ife ($op ($v x) ($v y))
+                                   ($v UI8 42)
+                                   ($v UI8 32))))
+               (list (if (op x y) 42 32)))))   
+   (for/list ([$op (in-list (list (FUN $%) (FUN $band) (FUN $bior) (FUN $bxor)
+                                  (FUN $bshl) (FUN $bshr)))]
+              [op (in-list (list modulo bitwise-and bitwise-ior bitwise-xor
+                                 arithmetic-shift
+                                 (λ (x y) (arithmetic-shift x (* -1 y)))))])
+     (for/list ([TY (in-list (list UI8 UI16 UI32 UI64))]
+                [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"))])  
+       (test-$op 13 4 TY TYp $op op)))
+   (let ()
+     (define X 8.0)
+     (define Y 6.0)
+     ;; XXX Add F32
+     (for/list ([TY (in-list (list F64))])
+       (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+                  [op (in-list (list * - + /))])
+         (test-$op X Y TY "%.4f" $op op #:F (λ (x) (real->decimal-string x 4))))))
+   (let ()
+     (define X 8)
+     (define Y 6)
+     (for/list ([TY (in-list (list UI8 UI16 UI32 UI64
+                                   SI8 SI16 SI32 SI64))]
+                [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"
+                                    "%hhd" "%hd" "%d" "%lld"))])
+       (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+                  [op (in-list (list * - + quotient))])
+         (test-$op X Y TY TYp $op op))))
    (a-test ($do ($printf ($v "%u\n")
                          ($seal 'MPH ($v UI32 19))))
            '("19"))
@@ -31,8 +72,6 @@
                          ($+ ($v UI32 1) ($unseal 'MPH ($seal 'MPH ($v UI32 19))))))
            '("20"))
    (let ()
-     (define-syntax-rule (FUN x)
-       (λ (a b) (x a b)))
      (define (!= x y) (not (= x y)))
      (define == =)
      (for/list ([<= (in-list (list <= < > >=
@@ -155,7 +194,14 @@
           (check-pred pair? out)
           (cond
             [(pair? out)
-             (check-equal? (first out) o)
+             (define fo (first out))
+             (cond
+               [(string? o)
+                (check-equal? fo o)]
+               [(number? o)
+                (check-equal? (string->number fo) o)]
+               [else
+                (error 'test)])
              (rest out)]
             [else
              out]))]))))

@@ -317,7 +317,29 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref $ife
+;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref
+
+(define-class $ife
+  #:fields
+  [c (Expr/c Bool)]
+  [t Expr?]
+  [f (Expr/c ((Expr-ty t)))]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append
+     pp:lparen
+     ((Expr-pp c))
+     (pp:text " ? ")
+     ((Expr-pp t))
+     (pp:text " : ")
+     ((Expr-pp f))
+     pp:rparen))
+  (define (ty) ((Expr-ty t)))
+  (define (lval?) #f)
+  (define (h! !)
+    ((Expr-h! c) !)
+    ((Expr-h! t) !)
+    ((Expr-h! f) !)))
 
 (define-class $seal
   #:fields
@@ -346,6 +368,7 @@
   #:fields
   [d Decl?]
   #:methods Expr
+  ;; XXX Put this somewhere else?
   (define ec (or (current-ec)
                  (error '$dref "Cannot reference declaration outside of emit")))
   (ec-add-decl! ec d #f)
@@ -523,10 +546,35 @@
   #:lhs-ctc (Expr/c Bool)
   #:pp "||")
 
-(define-op2-class $bshl
+(define-syntax (define-bop2-class stx)
+  (syntax-parse stx
+    [(_ name:id
+        #:lhs-ctc lhs-ctc:expr
+        #:pp arg-pp:expr
+        (~optional (~seq #:ty res-ty:expr)
+                   #:defaults ([res-ty #'((Expr-ty lhs))])))
+     (with-syntax ()
+       (syntax/loc stx
+         (define-class name
+           #:fields
+           [lhs lhs-ctc]
+           [rhs (Expr/c ((Expr-ty lhs)))]
+           #:methods Expr
+           (define (pp)
+             (pp:h-append pp:lparen
+                          pp:lparen ((Type-pp res-ty) #:name #f #:ptrs 0) pp:rparen
+                          (pp:op2 lhs arg-pp rhs)
+                          pp:rparen))
+           (define (ty) res-ty)
+           (define (lval?) #f)
+           (define (h! !)
+             ((Expr-h! lhs) !)
+             ((Expr-h! rhs) !)))))]))
+
+(define-bop2-class $bshl
   #:lhs-ctc Unsigned-Int/c
   #:pp "<<")
-(define-op2-class $bshr
+(define-bop2-class $bshr
   #:lhs-ctc Unsigned-Int/c
   #:pp ">>")
 
