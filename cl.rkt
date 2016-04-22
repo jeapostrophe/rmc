@@ -346,12 +346,34 @@
 
 (define-class $&
   #:fields
-  [e Expr?]
+  [e Lval/c]
   #:methods Expr
   (define (pp) (pp:op1 "&" e))
   (define (ty) (Ptr ((Expr-ty e))))
   (define (lval?) #f)
   (define (h! !) ((Expr-h! e) !)))
+
+(define-class $pref
+  #:fields
+  [e (Expr?/c "pointer" Ptr?)]
+  #:methods Expr
+  (define (pp) (pp:op1 "*" e))
+  (define (ty) (Ptr-st ((Expr-ty e))))
+  (define (lval?) #t)
+  (define (h! !) ((Expr-h! e) !)))
+
+(define-syntax ($@ stx)
+  (syntax-parse stx
+    [(_ e:expr)
+     (quasisyntax/loc stx
+       ($pref e))]
+    [(_ e:expr i ... k:keyword)
+     (quasisyntax/loc stx
+       ($fref #,(syntax/loc stx ($-> e i ...)) 'k))]
+    [(_ e:expr i ... a:expr)
+     (quasisyntax/loc stx
+       ($aref #,(syntax/loc stx ($-> e i ...)) a))]))
+(provide $@)
 
 ;; XXX Generalize this to allow expanding/shrinking ints
 (define-class $cast
@@ -1123,6 +1145,7 @@
        ($%app rator (list rand ...)))]))
 (provide $app)
 
+;; XXX Pass along srcloc?
 (define ($v* v)
   (match v
     [(? string?)
@@ -1175,6 +1198,7 @@
               ($let* more . b)))]))
 (provide $let*)
 
+;; XXX Pass along srcloc
 (define-simple-macro ($while e . b)
   ($%while e ($begin . b)))
 (define-simple-macro ($when e . b)

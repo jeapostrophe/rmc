@@ -48,8 +48,12 @@
                   ($do ($printf ($v "%d\n")
                                 ($ife ($== ip1 jp) ($v UI8 1) ($v UI8 0))))
                   ($do ($printf ($v "%d\n")
-                                ($ife ($!= ip1 jp) ($v UI8 1) ($v UI8 0)))))
-           (list "1" "0" "0" "1"))
+                                ($ife ($!= ip1 jp) ($v UI8 1) ($v UI8 0))))
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($== ($@ ip1) ($@ jp)) ($v UI8 1) ($v UI8 0))))
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($== ($@ ip1) ($@ kp)) ($v UI8 1) ($v UI8 0)))))
+           (list "1" "0" "0" "1" "1" "0"))
    
    (for/list ([$op (in-list (list (FUN $and) (FUN $or)))]
               [op (in-list (list (FUN and) (FUN or)))])
