@@ -16,7 +16,6 @@
        ((a-test*-stmt-f tt))])))
 
 ;; XXX test function pointers
-;; XXX test $== and $!= on Ptrs
 
 (define-syntax-rule (FUN x)
   (λ (a b) (x a b)))
@@ -35,6 +34,23 @@
 
 (define TESTS
   (list
+   (a-test ($let* ([UI8 i ($v UI8 32)]
+                   [UI8 j ($v UI8 32)]
+                   [UI8 k ($v UI8 33)]
+                   [(Ptr UI8) ip1 ($& i)]
+                   [(Ptr UI8) ip2 ($& i)]
+                   [(Ptr UI8) jp ($& j)]
+                   [(Ptr UI8) kp ($& k)])
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($== ip1 ip2) ($v UI8 1) ($v UI8 0))))
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($!= ip1 ip2) ($v UI8 1) ($v UI8 0))))
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($== ip1 jp) ($v UI8 1) ($v UI8 0))))
+                  ($do ($printf ($v "%d\n")
+                                ($ife ($!= ip1 jp) ($v UI8 1) ($v UI8 0)))))
+           (list "1" "0" "0" "1"))
+   
    (for/list ([$op (in-list (list (FUN $and) (FUN $or)))]
               [op (in-list (list (FUN and) (FUN or)))])
      (for*/list ([x (in-list '(#t #f))]

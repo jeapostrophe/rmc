@@ -342,7 +342,16 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $addr $pref $sref $uref
+;; XXX Exprs: $sizeof $offsetof $aref $pref $sref $uref
+
+(define-class $&
+  #:fields
+  [e Expr?]
+  #:methods Expr
+  (define (pp) (pp:op1 "&" e))
+  (define (ty) (Ptr ((Expr-ty e))))
+  (define (lval?) #f)
+  (define (h! !) ((Expr-h! e) !)))
 
 ;; XXX Generalize this to allow expanding/shrinking ints
 (define-class $cast
@@ -1035,6 +1044,9 @@
     (λ ()
       (delete-file* p))))
 
+;; XXX Choose a name to the compilation
+;; XXX Allow library compilation
+;; XXX Automatically link in to Racket?
 (define (compile&f u f)
   (define er (emit u))
   (call-with-temporary
