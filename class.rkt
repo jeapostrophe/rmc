@@ -134,7 +134,22 @@
         [_name-fields (format-id #'name-fields "_~a" #'name-fields)]
         [(_name-fields-f ...)
          (for/list ([f (in-list (syntax->list #'(f ...)))])
-           (format-id #'_name-fields "~a-~a" #'_name-fields f))])
+           (format-id #'_name-fields "~a-~a" #'_name-fields f))]
+        [singleton-case
+         (if (null? (syntax->list #'(f ...)))
+             (syntax/loc stx
+               [_:id
+                (quasisyntax/loc stx
+                  (make-name-object
+                   #,(syntax/loc stx
+                       (name-fields))))])
+             (syntax/loc stx
+               [_:id
+                (quasisyntax/loc stx
+                  (λ (f ...)
+                    (make-name-object
+                     #,(syntax/loc stx
+                         (name-fields f ...)))))]))])
        (syntax/loc stx
          (begin
            (define (make-name-object fields)
@@ -157,12 +172,8 @@
                 (quasisyntax/loc stx
                   (make-name-object
                    #,(syntax/loc stx
-                       (name-fields n ...))))]
-               [_:id
-                (quasisyntax/loc stx
-                  (make-name-object
-                   #,(syntax/loc stx
-                       (name-fields))))]))
+                       (name-fields n ...))))]               
+               singleton-case))
            (define (name? x)
              (name-object? x))
            (define (name-f x)

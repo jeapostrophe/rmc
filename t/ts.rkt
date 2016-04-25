@@ -6,9 +6,8 @@
 (struct a-test* (stmt-f output))
 (define-syntax-rule (a-test stmt output) (a-test* (λ () stmt) output))
 
-;; XXX Remove the need for this
-(define-syntax-rule (FUN x)
-  (λ (a b) (x a b)))
+(define (band a b) (and a b))
+(define (bor a b) (or a b))
 
 (define TESTS
   (list
@@ -83,8 +82,8 @@
                                 ($ife ($== ($@ ip1) ($@ kp)) ($v UI8 1) ($v UI8 0)))))
            (list "1" "0" "0" "1" "1" "0"))
 
-   (for/list ([$op (in-list (list (FUN $and) (FUN $or)))]
-              [op (in-list (list (FUN and) (FUN or)))])
+   (for/list ([$op (in-list (list $and $or))]
+              [op (in-list (list band bor))])
      (for*/list ([x (in-list '(#t #f))]
                  [y (in-list '(#t #f))])
        (a-test ($do ($printf ($v "%u\n")
@@ -105,8 +104,8 @@
                                         z))))
                (list (F (op X Y)))))
      (list
-      (for/list ([$op (in-list (list (FUN $%) (FUN $band) (FUN $bior) (FUN $bxor)
-                                     (FUN $bshl) (FUN $bshr)))]
+      (for/list ([$op (in-list (list $% $band $bior $bxor
+                                     $bshl $bshr))]
                  [op (in-list (list modulo bitwise-and bitwise-ior bitwise-xor
                                     arithmetic-shift
                                     (λ (x y) (arithmetic-shift x (* -1 y)))))])
@@ -117,7 +116,7 @@
         (for/list ([TY (in-list (list F32 F64))]
                    [X (in-list (list 8f0 8.0))]
                    [Y (in-list (list 6f0 6.0))])
-          (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+          (for/list ([$op (in-list (list $* $- $+ $/))]
                      [op (in-list (list * - + /))])
             (test-$op X Y TY "%.4f" $op op
                       #:CAST (if (single-flonum? X) F64 #f)
@@ -129,7 +128,7 @@
                                       SI8 SI16 SI32 SI64))]
                    [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"
                                        "%hhd" "%hd" "%d" "%lld"))])
-          (for/list ([$op (in-list (list (FUN $*) (FUN $-) (FUN $+) (FUN $/)))]
+          (for/list ([$op (in-list (list $* $- $+ $/))]
                      [op (in-list (list * - + quotient))])
             (test-$op X Y TY TYp $op op))))))
    (a-test ($do ($printf ($v "%u\n")
@@ -143,8 +142,7 @@
      (define == =)
      (for/list ([<= (in-list (list <= < > >=
                                    != ==))]
-                [$<= (in-list (list (FUN $<=) (FUN $<) (FUN $>) (FUN $>=)
-                                    (FUN $!=) (FUN $==)))])
+                [$<= (in-list (list $<= $< $> $>= $!= $==))])
        (define (<=-test TY L R)
          (a-test ($let* ([UI8 i ($v UI8 0)]
                          [TY l ($v TY L)])
