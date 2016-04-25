@@ -143,39 +143,6 @@
 (define-class-alias SI32 (Int #t 32))
 (define-class-alias SI64 (Int #t 64))
 
-;; XXX Doesn't work with de-normalized
-(define (float->cliteral bits x)
-  (define size
-    (match bits
-      [32 4]
-      [64 8]))
-  (define fbs (real->floating-point-bytes x size #t))
-  (define n (integer-bytes->integer fbs #f #t))
-  (define-values (sign exp sig)
-    (match bits
-      [32 (values (bitwise-bit-field n 31 32)
-                  (- (bitwise-bit-field n 23 31) 127)
-                  (bitwise-bit-field n 0 23))]
-      [64 (values (bitwise-bit-field n 63 64)
-                  (- (bitwise-bit-field n 52 63) 1023)
-                  (bitwise-bit-field n 0 52))]))
-  (format "0x1.~ap~a~a~a"
-          (number->string sig 16)
-          (if (= sign 0) "+" "-")
-          (number->string exp 10)
-          (match bits
-            [32 "f"]
-            [64 ""])))
-(module+ test
-  (float->cliteral 32 3.0f0)
-  (float->cliteral 64 3.0)
-  (float->cliteral 32 -3.0f0)
-  (float->cliteral 64 -3.0)
-  (float->cliteral 32 64.0f0)
-  (float->cliteral 64 64.0)
-  (float->cliteral 32 -64.0f0)
-  (float->cliteral 64 -64.0))
-
 (define-class Float
   #:fields
   [bits (one-of/c 32 64)]
@@ -196,7 +163,8 @@
        [64 double-flonum?])
      x))
   (define (pp:val v)
-    (pp:h-append (pp:text (real->decimal-string v bits))
+    (pp:h-append (pp:text
+                  (regexp-replace #rx"f" (number->string v) "e"))
                  (match bits
                    [32 (pp:text "f")]
                    [64 pp:empty]))))
@@ -407,31 +375,28 @@
   (define (lval?) #t)
   (define (h! !) ((Expr-h! e) !)))
 
-;; XXX Merge somehow
-(define-syntax ($@ stx)
+(define-syntax (define-$@ stx)
   (syntax-parse stx
-    [(_ e:expr)
-     (quasisyntax/loc stx
-       ($pref e))]
-    [(_ e:expr i ... k:keyword)
-     (quasisyntax/loc stx
-       ($fref #,(syntax/loc stx ($@ e i ...)) (keyword->symbol 'k)))]
-    [(_ e:expr i ... a:expr)
-     (quasisyntax/loc stx
-       ($aref #,(syntax/loc stx ($@ e i ...)) a))]))
+    [(_ name:id the-e the-end)
+     (syntax/loc stx
+       (begin
+         (define-syntax (name stx)
+           (syntax-parse stx
+             [(_ the-e)
+              (quasisyntax/loc stx
+                the-end)]
+             [(_ the-e i (... ...) k:keyword)
+              (quasisyntax/loc stx
+                ($fref #,(syntax/loc stx (name the-e i (... ...)))
+                       (keyword->symbol 'k)))]
+             [(_ the-e i (... ...) a:expr)
+              (quasisyntax/loc stx
+                ($aref #,(syntax/loc stx (name the-e i (... ...)))
+                       a))]))
+         (provide name)))]))
 
-(define-syntax ($@: stx)
-  (syntax-parse stx
-    [(_ e:expr)
-     (quasisyntax/loc stx
-       e)]
-    [(_ e:expr i ... k:keyword)
-     (quasisyntax/loc stx
-       ($fref #,(syntax/loc stx ($@: e i ...)) (keyword->symbol 'k)))]
-    [(_ e:expr i ... a:expr)
-     (quasisyntax/loc stx
-       ($aref #,(syntax/loc stx ($@: e i ...)) a))]))
-(provide $@ $@:)
+(define-$@ $@  e ($pref e))
+(define-$@ $@: e e)
 
 ;; XXX Generalize this to allow expanding/shrinking ints
 (define-class $cast
@@ -1084,7 +1049,6 @@
 (define (pp:decl ec d)
   (hash-ref (emit-context-decl->pp ec) d))
 
-;; XXX Add a $lib for linking with Racket?
 (define-class $exe
   #:fields
   [main $%proc?]
@@ -1146,8 +1110,6 @@
       (delete-file* p))))
 
 ;; XXX Choose a name to the compilation
-;; XXX Allow library compilation
-;; XXX Automatically link in to Racket?
 (define (compile&f u f)
   (define er (emit u))
   (call-with-temporary
@@ -1167,6 +1129,8 @@
                       (append (list o) (emit-result-ldflags er) (list "-o" b)))
                (error 'run "Failed to link"))
            (f b))))))))
+
+;; XXX Make a way to link in a set of functions to Racket
 
 (define (run u)
   (compile&f u (λ (b) (system* b) (void))))
@@ -1284,13 +1248,24 @@
               ($let* more . b)))]))
 (provide $let*)
 
-;; XXX Pass along srcloc
-(define-simple-macro ($while e . b)
-  ($%while e ($begin . b)))
-(define-simple-macro ($when e . b)
-  ($if e ($begin . b) ($nop)))
-(define-simple-macro ($unless e . b)
-  ($when ($! e) . b))
+(define-syntax ($while stx)
+  (syntax-parse stx
+    [(_ e . b)
+     (quasisyntax/loc stx
+       ($%while e
+                #,(syntax/loc #'b ($begin . b))))]))
+(define-syntax ($when stx)
+  (syntax-parse stx
+    [(_ e . b)
+     (quasisyntax/loc stx
+       ($if e #,(syntax/loc #'b ($begin . b)) ($nop)))]))
+(define-syntax ($unless stx)
+  (syntax-parse stx
+    [(_ e . b)
+     (quasisyntax/loc stx
+       ($if #,(syntax/loc stx ($! e))
+            #,(syntax/loc #'b ($begin . b))
+            ($nop)))]))
 (provide $while $when $unless)
 
 (struct iter (init test step))
