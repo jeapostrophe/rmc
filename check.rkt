@@ -5,6 +5,13 @@
          racket/match
          racket/port)
 
+;; XXX add srcloc
+
+;; XXX expect-exn for when you want an exception
+
+;; XXX checks form that uses escape continuation to stop evaluation of
+;; a block when a check fails
+
 (define check-inform (gensym))
 
 (define-syntax (check stx)

@@ -100,7 +100,6 @@
   (pp:text (number->string (char->integer c))))
 (define (never? x) #f)
 
-(define-class-alias Size (Literal "size_t" never? pp:never))
 (define-class-alias Char (Literal "char" char? pp:char-val))
 (define-class-alias Void (Literal "void" never? pp:never))
 (define Void? (Type-eq Void))
@@ -135,6 +134,9 @@
 (define-class-alias UI16 (Int #f 16))
 (define-class-alias UI32 (Int #f 32))
 (define-class-alias UI64 (Int #f 64))
+
+(define-class-alias Size (UI64)
+  #; (Literal "size_t" never? pp:never))
 
 (define-class-alias  SI8 (Int #t 8))
 (define-class-alias SI16 (Int #t 16))
@@ -204,23 +206,44 @@
 
 (define (Numeric? x) (or (Int? x) (Float? x)))
 
-(define-class Ptr
+(define-class *Ptr
   #:fields
+  [k (or/c false/c exact-nonnegative-integer?)]
   [st Type?]
   #:methods Type
   (define (name)
-    (format "ptr(~a)" ((Type-name st))))
+    (define stn ((Type-name st)))
+    (if k
+        (format "~a[~a]" stn k)
+        (format "ptr(~a)" stn)))
   (define (pp #:name n #:ptrs p)
-    ((Type-pp st) #:name n #:ptrs (add1 p)))
+    (if k
+        (pp:h-append ((Type-pp st) #:name #f #:ptrs p)
+                     (if n (pp:h-append pp:space (pp:text n)) pp:empty)
+                     pp:lbracket (pp:text (number->string k)) pp:rbracket)
+        ((Type-pp st) #:name n #:ptrs (add1 p))))
   (define (h! !) ((Type-h! st) !))
   (define (eq t)
-    (and (Ptr? t)
-         ((Type-eq st) (Ptr-st t))))
-  (define (val? x) ($NULL? x))
+    (and (*Ptr? t)
+         ((Type-eq st) (*Ptr-st t))
+         (or (not k)
+             (<= k (*Ptr-k t)))))
+  (define (val? x)
+    (if k
+        #f
+        ($NULL? x)))
   (define (pp:val v)
-    (pp:text "NULL")))
+    (if k
+        (error 'pp:never)
+        (pp:text "NULL"))))
 
-;; XXX Record Arr Union
+(define-class-alias Ptr (*Ptr #f))
+(define-class-alias Arr (*Ptr))
+(define (Array? x)
+  (and (*Ptr? x)
+       (*Ptr-k x)))
+
+;; XXX Struct Union
 
 (define-class Fun
   #:fields
@@ -297,6 +320,13 @@
 (define (gencsym [s 'c])
   (symbol->string (gensym (regexp-replace* #rx"[^A-Za-z_0-9]" (format "_~a" s) "_"))))
 
+(define (Compound? t)
+  (or (Array? t)
+      ;(Struct? t) ;; XXX
+      ;(Union? t) ;; XXX
+      (and (Seal*? t)
+           (Compound? (Seal*-st t)))))
+
 ;;; Expressions
 
 (define-interface Expr
@@ -342,7 +372,20 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $aref $fref
+;; XXX Exprs: $sizeof $offsetof $fref
+
+(define-class $aref
+  #:fields
+  [e (Expr?/c "array or pointer" *Ptr?)]
+  [o Unsigned-Int/c]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append ((Expr-pp e)) pp:lbracket ((Expr-pp o)) pp:rbracket))
+  (define (ty) (*Ptr-st ((Expr-ty e))))
+  (define (lval?) #t)
+  (define (h! !)
+    ((Expr-h! e) !)
+    ((Expr-h! o) !)))
 
 (define-class $&
   #:fields
@@ -355,13 +398,16 @@
 
 (define-class $pref
   #:fields
-  [e (Expr?/c "pointer" Ptr?)]
+  [e (Expr?/c "array pointer" *Ptr?)]
   #:methods Expr
   (define (pp) (pp:op1 "*" e))
-  (define (ty) (Ptr-st ((Expr-ty e))))
+  (define (ty)
+    (define e-ty ((Expr-ty e)))
+    (*Ptr-st e-ty))
   (define (lval?) #t)
   (define (h! !) ((Expr-h! e) !)))
 
+;; XXX Merge somehow
 (define-syntax ($@ stx)
   (syntax-parse stx
     [(_ e:expr)
@@ -369,11 +415,23 @@
        ($pref e))]
     [(_ e:expr i ... k:keyword)
      (quasisyntax/loc stx
-       ($fref #,(syntax/loc stx ($-> e i ...)) 'k))]
+       ($fref #,(syntax/loc stx ($@ e i ...)) (keyword->symbol 'k)))]
     [(_ e:expr i ... a:expr)
      (quasisyntax/loc stx
-       ($aref #,(syntax/loc stx ($-> e i ...)) a))]))
-(provide $@)
+       ($aref #,(syntax/loc stx ($@ e i ...)) a))]))
+
+(define-syntax ($@: stx)
+  (syntax-parse stx
+    [(_ e:expr)
+     (quasisyntax/loc stx
+       e)]
+    [(_ e:expr i ... k:keyword)
+     (quasisyntax/loc stx
+       ($fref #,(syntax/loc stx ($@: e i ...)) (keyword->symbol 'k)))]
+    [(_ e:expr i ... a:expr)
+     (quasisyntax/loc stx
+       ($aref #,(syntax/loc stx ($@: e i ...)) a))]))
+(provide $@ $@:)
 
 ;; XXX Generalize this to allow expanding/shrinking ints
 (define-class $cast
@@ -573,14 +631,15 @@
   #:ty Bool)
 
 (define-op2-class $!=
-  #:lhs-ctc (or/c Number/c
-                  (Expr?/c "pointer" Ptr?))
+  #:lhs-ctc 
+  (or/c Number/c
+        (Expr?/c "pointer" *Ptr?))
   #:pp "!="
   #:ty Bool)
 
 (define-op2-class $==
   #:lhs-ctc (or/c Number/c
-                  (Expr?/c "pointer" Ptr?))
+                  (Expr?/c "pointer" *Ptr?))
   #:pp "=="
   #:ty Bool)
 
@@ -675,8 +734,8 @@
   [rator (or/c (Expr?/c "function" Fun?)
                (Expr?/c "function ptr"
                         (λ (x)
-                          (and (Ptr? x)
-                               (Fun? (Ptr-st x))))))]
+                          (and (*Ptr? x)
+                               (Fun? (*Ptr-st x))))))]
   [rands
    (let ([rator-ty ((Expr-ty rator))])
      (cond
@@ -684,8 +743,8 @@
         (listof Expr?)]
        [(Fun? rator-ty)
         (Fun-args/c rator-ty)]
-       [(Ptr? rator-ty)
-        (Fun-args/c (Ptr-st rator-ty))]))]
+       [(*Ptr? rator-ty)
+        (Fun-args/c (*Ptr-st rator-ty))]))]
   #:methods Expr
   (define (pp)
     (pp:h-append ((Expr-pp rator)) pp:lparen
@@ -700,8 +759,8 @@
        Any]
       [(Fun? rator-ty)
        (Fun-rng rator-ty)]
-      [(Ptr? rator-ty)
-       (Fun-rng (Ptr-st rator-ty))]))
+      [(*Ptr? rator-ty)
+       (Fun-rng (*Ptr-st rator-ty))]))
   (define (lval?) #f)
   (define (h! !)
     ((Expr-h! rator) !)
@@ -809,7 +868,12 @@
   (define var (Var vty (gencsym hn)))  
   (define body (bodyf var))
   (define (pp)
-    (pp:h-append pp:lbrace pp:space ((Var-pp var)) pp:semi
+    (pp:h-append pp:lbrace pp:space ((Var-pp var))
+                 pp:space (pp:char #\=) pp:space
+                 (if (Compound? vty)
+                     (pp:text "{0}")
+                     (pp:text "0"))
+                 pp:semi
                  (pp:nest NEST (pp:h-append pp:line ((Stmt-pp body)))) pp:rbrace))
   (define (h! !)
     ((Stmt-h! body) !))
@@ -1199,7 +1263,14 @@
                    (λ (n)
                      ($seq ($set! n e)
                            #,(quasisyntax/loc #'b
-                               ($begin . b)))))))]))
+                               ($begin . b)))))))]
+    [(_ ([ty:expr n:id]) . b)
+     (quasisyntax/loc stx
+       ($%let1 'n ty
+               #,(quasisyntax/loc stx
+                   (λ (n)
+                     #,(quasisyntax/loc #'b
+                         ($begin . b))))))]))
 (provide $let1)
 
 (define-syntax ($let* stx)
@@ -1207,9 +1278,9 @@
     [(_ () . b)
      (syntax/loc stx
        ($begin . b))]
-    [(_ ([ty n e] . more) . b)
+    [(_ (f . more) . b)
      (syntax/loc stx
-       ($let1 ([ty n e])
+       ($let1 (f)
               ($let* more . b)))]))
 (provide $let*)
 

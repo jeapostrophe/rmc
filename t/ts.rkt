@@ -6,11 +6,35 @@
 (struct a-test* (stmt-f output))
 (define-syntax-rule (a-test stmt output) (a-test* (λ () stmt) output))
 
+;; XXX Remove the need for this
 (define-syntax-rule (FUN x)
   (λ (a b) (x a b)))
 
 (define TESTS
   (list
+   (let ()
+     (define (cmp e)
+       ($let* ([Bool i e])
+              ($do ($printf ($v "%u\n")
+                            ($ife i
+                                  ($v UI8 1)
+                                  ($v UI8 0))))))
+     (a-test ($let* ([(Arr 4 UI8) a]
+                     [(Arr 4 UI8) b])
+                    ($set! ($aref a ($v UI8 0)) ($v UI8 1))
+                    ($set! ($aref a ($v UI8 1)) ($v UI8 2))
+                    ($set! ($aref a ($v UI8 2)) ($v UI8 3))
+                    ($set! ($aref a ($v UI8 3)) ($v UI8 4))
+                    ($do ($printf ($v "%u\n") ($@: a ($v UI8 2))))
+                    ($do ($printf ($v "%u\n") ($@ a)))
+                    ($begin (cmp ($!= a b))
+                            (cmp ($!= a a))
+                            (cmp ($== a b))
+                            (cmp ($== a a))))
+             (list "3"
+                   "1"
+                   "1" "0"
+                   "0" "1")))
    (let ()
      (define add2
        ($proc ([UI8 a]) UI8
@@ -233,22 +257,27 @@
       ($default-flags ($exe main)))
 
     (define emit? #f)
-    (define actual-out (string-split (run&capture this) "\n"))
-    (define expected-out (a-test*-output t))
+    (with-handlers ([exn:fail?
+                     (λ (x)
+                       (set! emit? #t)
+                       (with-check-details (['fail "compilation failed"])
+                         (check #f)))])
+      (define actual-out (string-split (run&capture this) "\n"))
+      (define expected-out (a-test*-output t))
 
-    (with-check-details ([check-inform (λ () (set! emit? #t))])
-      (check (length actual-out) (length expected-out))
-      (for ([a (in-list actual-out)]
-            [e (in-list expected-out)])
-        (cond
-          [(string? e)
-           (check a e)]
-          [(number? e)
-           (check (string->number a) e)]
-          [else
-           (with-check-details (['name "invalid expected"]
-                                ['v (format "~e" e)])
-             (check #f))])))
+      (with-check-details ([check-inform (λ () (set! emit? #t))])
+        (check (length actual-out) (length expected-out))
+        (for ([a (in-list actual-out)]
+              [e (in-list expected-out)])
+          (cond
+            [(string? e)
+             (check a e)]
+            [(number? e)
+             (check (string->number a) e)]
+            [else
+             (with-check-details (['fail "invalid expected"]
+                                  ['v (format "~e" e)])
+               (check #f))]))))
 
     (when emit?
       (emit! this)))
