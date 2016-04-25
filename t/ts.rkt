@@ -112,9 +112,9 @@
               ($ret ($+ a ($v UI8 3)))))
      (a-test
       ($let* ([(Ptr (Fun (list UI8) UI8))
-               f ($& ($dref add2))]
+               f ($& add2)]
               [(Ptr (Fun (list UI8) UI8))
-               g ($& ($dref add3))]
+               g ($& add3)]
               [UI8 two ($v UI8 2)])
              ($do ($printf ($v "%u\n") (add2 two)))
              ($do ($printf ($v "%u\n") ($app ($@ f) two)))

@@ -623,15 +623,6 @@
   (define (lval?) #f)
   (define (h! !) ((Expr-h! e) !)))
 
-(define-class $dref
-  #:fields
-  [d Decl?]
-  #:methods Expr
-  (define (pp) (pp:text ((Decl-name d))))
-  (define (ty) ((Decl-ty d)))
-  (define (lval?) #t)
-  (define (h! !) (ec-add-decl! d)))
-
 (define-class Var
   #:fields
   [type Type?]
@@ -1046,31 +1037,25 @@
         #:proto-only? boolean?
         pp:doc?))])
 
-(define ($dref-$%app d args)
-  ($%app ($dref d) args))
-
-#;
-(define-class $%typedef-struct
-  #:fields
-  [hn symbol?]
-  [sty *Struct?]
-  #:methods Decl
-  (define (ty) sty)
-  (define (name) (gencsym hn))
-  (define (visit! #:headers! ! #:global? global? #:name n)
-    ((Type-h! sty) !)
-    (λ (#:proto-only? po?)
-      (if po?
-          (pp:h-append (pp:text "struct") pp:space)
-          )))
-  )
+(define-syntax (define-$dref-Expr stx)
+  (syntax-parse stx
+    [(_)
+     (with-syntax ([(pp ty lval? h!)
+                    (for/list ([i (in-list '(pp ty lval? h!))])
+                      (datum->syntax stx i))])
+       (syntax/loc stx
+         (begin (define (pp) (pp:text ((Decl-name this))))
+                (define (ty) ((Decl-ty this)))
+                (define (lval?) #t)
+                (define (h! !) (ec-add-decl! this)))))]))
 
 (define-class $extern
   #:fields
   [h CHeader?]
   [n CName?]
   [ety Type?]
-  #:procedure $dref-$%app
+  #:procedure $%app
+  #:methods Expr (define-$dref-Expr)
   #:methods Decl
   (define (ty) ety)
   (define (name) n)
@@ -1093,7 +1078,8 @@
                                     "returns"
                                     (λ (x)
                                       ((Stmt-ret? x)))))))]
-  #:procedure $dref-$%app
+  #:procedure $%app
+  #:methods Expr (define-$dref-Expr)
   #:methods Decl
   (define (ty) pty)
 
