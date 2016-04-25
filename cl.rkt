@@ -628,7 +628,7 @@
   [d Decl?]
   #:methods Expr
   ;; XXX This is the ugliest part.
-  (ec-add-decl! (current-ec*) d #f)
+  (ec-add-decl! d)
   (define (pp) (pp:text ((Decl-name d))))
   (define (ty) ((Decl-ty d)))
   (define (lval?) #t)
@@ -1044,8 +1044,6 @@
    (-> CName?)]
   [visit!
    (-> #:headers! (-> CHeader? void?)
-       #:global? boolean?
-       #:name CName?
        (->
         #:proto-only? boolean?
         pp:doc?))])
@@ -1078,7 +1076,7 @@
   #:methods Decl
   (define (ty) ety)
   (define (name) n)
-  (define (visit! #:headers! ! #:global? global? #:name n)
+  (define (visit! #:headers! !)
     (! h)
     ((Type-h! ety) !)
     (λ (#:proto-only? po?)
@@ -1103,12 +1101,12 @@
 
   (define default-name (gencsym hn))
   (define (name)
-    (or (hash-ref (emit-context-decl->name (current-ec*))
-                  this
-                  #f)
+    (or (ec-global-name this)
         default-name))
   
-  (define (visit! #:headers! headers! #:global? global? #:name n)
+  (define (visit! #:headers! headers!)
+    (define global? (ec-global-name this))
+    (define n (name))
     (define maybe-static
       (if global? pp:empty (pp:h-append (pp:text "static") pp:space)))
     (define dom
@@ -1183,7 +1181,7 @@
 (struct emit-context
   (headers
    decls
-   decl->name
+   decl->gname
    decl->proto-pp
    decl->pp))
 (define (make-emit-context)
@@ -1196,26 +1194,21 @@
 (define (current-ec*)
   (or (current-ec)
       (error 'Decl "Cannot reference declaration outside of emit")))
-(define (ec-add-decl! ec d n)
-  (define ds (emit-context-decls ec))
-  (unless (set-member? ds d)
-    (set-add! ds d)
-    (hash-set! (emit-context-decl->name ec) d (or n ((Decl-name d))))))
+(define (ec-global-name d)
+  (hash-ref (emit-context-decl->gname (current-ec*)) d #f))
+(define (ec-global-name! d n)
+  (hash-set! (emit-context-decl->gname (current-ec*)) d n))
+(define (ec-add-decl! d)
+  (set-add! (emit-context-decls (current-ec*)) d))
 (define (ec-fixed-point! ec)
   (define repeat? #f)
   (define hs (emit-context-headers ec))
-  (define d->n (emit-context-decl->name ec))
   (define d->proto-pp (emit-context-decl->proto-pp ec))
   (define d->pp (emit-context-decl->pp ec))
   (for ([d (in-set (emit-context-decls ec))]
         #:unless (hash-has-key? d->pp d))
     (set! repeat? #t)
-    (define n (hash-ref! d->n d (λ () ((Decl-name d)))))
-    (define ppf
-      ((Decl-visit! d)
-       #:headers! (λ (h) (set-add! hs h))
-       #:global? (string=? n "main")
-       #:name n))
+    (define ppf ((Decl-visit! d) #:headers! (λ (h) (set-add! hs h))))
     (hash-set! d->proto-pp d (ppf #:proto-only? #t))
     (hash-set! d->pp d (ppf #:proto-only? #f)))
   (when repeat?
@@ -1232,7 +1225,8 @@
   (define (emit)
     (define ec (make-emit-context))
     (parameterize ([current-ec ec])
-      (ec-add-decl! ec main "main")
+      (ec-global-name! main "main")
+      (ec-add-decl! main)
       (ec-fixed-point! ec))
     (define cflags
       (append*
