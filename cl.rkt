@@ -632,7 +632,7 @@
                  (error '$dref "Cannot reference declaration outside of emit")))
   (ec-add-decl! ec d #f)
   (define (pp) (pp:text (hash-ref (emit-context-decl->name ec) d)))
-  (define (ty) (hash-ref (emit-context-decl->ty ec) d))
+  (define (ty) ((Decl-ty d)))
   (define (lval?) #t)
   (define (h! !) (void)))
 
@@ -1118,11 +1118,9 @@
                  [hn (in-list hns)])
         (Var t (gencsym hn))))
     ((Type-h! pty) headers!)
-    (define the-body
-      (apply body vs))
+    (define the-body (apply body vs))
     ((Stmt-h! the-body) headers!)
-    (define body-pp
-      ((Stmt-pp the-body)))
+    (define body-pp ((Stmt-pp the-body)))
     (λ (#:proto-only? proto-only?)
       (pp:h-append
        maybe-static
@@ -1186,13 +1184,11 @@
   (headers
    decls
    decl->name
-   decl->ty
    decl->proto-pp
    decl->pp))
 (define (make-emit-context)
   (emit-context (mutable-seteq <stdint.h> <stddef.h>)
                 (mutable-seteq)
-                (make-hasheq)
                 (make-hasheq)
                 (make-hasheq)
                 (make-hasheq)))
@@ -1201,9 +1197,7 @@
   (define ds (emit-context-decls ec))
   (unless (set-member? ds d)
     (set-add! ds d)
-    (hash-set! (emit-context-decl->name ec) d (or n ((Decl-name d))))
-    (define ty ((Decl-ty d)))
-    (hash-set! (emit-context-decl->ty ec) d ty)))
+    (hash-set! (emit-context-decl->name ec) d (or n ((Decl-name d))))))
 (define (ec-fixed-point! ec)
   (define repeat? #f)
   (define hs (emit-context-headers ec))

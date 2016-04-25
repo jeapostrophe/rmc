@@ -5,7 +5,8 @@
                      syntax/srcloc)
          syntax/location
          racket/contract/base
-         racket/match)
+         racket/match
+         racket/stxparam)
 
 (define-syntax (define-srcloc-struct stx)
   (syntax-parse stx
@@ -106,6 +107,9 @@
            (list (cons _inst:name-m m^)
                  ...)))))]))
 
+(define-syntax-parameter this
+  (λ (stx) (raise-syntax-error 'this "Illegal outside define-class methods")))
+
 (define-syntax (define-class stx)
   (syntax-parse stx
     [(_ name:id
@@ -154,14 +158,17 @@
          (begin
            (define (make-name-object fields)
              (match-define (_name-fields srcloc f ...) fields)
-             (name-object
-              (make-immutable-hasheq
-               (list
-                (let ()
-                  idef ...
-                  (make-interface-record iname))
-                ...))
-              fields))
+             (define the-object
+               (name-object
+                (syntax-parameterize ([this (make-rename-transformer #'the-object)])
+                  (make-immutable-hasheq
+                   (list
+                    (let ()
+                      idef ...
+                      (make-interface-record iname))
+                    ...)))
+                fields))
+             the-object)
            (define-srcloc-struct name-fields [f f-ctc] ...)
            (struct name-object object ()
              #:reflection-name 'name
@@ -172,7 +179,7 @@
                 (quasisyntax/loc stx
                   (make-name-object
                    #,(syntax/loc stx
-                       (name-fields n ...))))]               
+                       (name-fields n ...))))]
                singleton-case))
            (define (name? x)
              (name-object? x))
@@ -210,4 +217,5 @@
 (provide define-srcloc-struct
          define-interface
          define-class
-         define-class-alias)
+         define-class-alias
+         this)
