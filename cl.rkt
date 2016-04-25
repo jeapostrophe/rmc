@@ -317,7 +317,11 @@
   (define name (format "Expr with ~a" lab))
   (make-flat-contract
    #:name name
-   #:first-order Expr?
+   #:first-order
+   (λ (x)
+     (and (Expr? x)
+          (let ([xt ((Expr-ty x))])
+            (or (Any? xt) (ty? xt)))))
    #:projection
    (λ (b)
      (λ (x)
@@ -340,7 +344,19 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $sizeof $offsetof $fref
+;; XXX Exprs: $offsetof $fref
+
+(define-class $sizeof
+  #:fields
+  [arg-ty (and/c Type? (not/c (or/c Any? Void? Fun?)))]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append pp:lparen (pp:text "sizeof") pp:lparen
+                 ((Type-pp arg-ty) #:name #f #:ptrs 0)
+                 pp:rparen pp:rparen))
+  (define (ty) Size)
+  (define (lval?) #f)
+  (define (h! !) ((Type-h! arg-ty) !)))
 
 (define-class $aref
   #:fields

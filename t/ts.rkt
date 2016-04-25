@@ -1,5 +1,6 @@
 #lang racket/base
-(require "../cl.rkt"
+(require racket/match
+         "../cl.rkt"
          "../h/libc.rkt"
          "fac.rkt")
 
@@ -11,6 +12,20 @@
 
 (define TESTS
   (list
+   (let ()
+     (for/list ([t*s
+                 (in-list
+                  (list (cons UI8 1) (cons UI16 2) (cons UI32 4) (cons UI64 8)
+                        (cons SI8 1) (cons SI16 2) (cons SI32 4) (cons SI64 8)
+                        (cons F32 4) (cons F64 8)
+                        (cons Char 1) (cons Size 8)
+                        (cons (Ptr UI8) 8) (cons (Ptr UI64) 8)
+                        (cons (Arr 4 UI8) 4) (cons (Arr 4 UI64) 32)
+                        (cons (Ptr (Fun (list UI8 UI8) UI8)) 8)
+                        (cons Bool 1)))])
+       (match-define (cons t s) t*s)
+       (a-test ($do ($printf ($v "%lu\n") ($sizeof t)))
+               (list (number->string s)))))   
    (let ()
      (define (cmp e)
        ($let* ([Bool i e])
