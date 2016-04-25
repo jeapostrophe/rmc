@@ -628,10 +628,8 @@
   [d Decl?]
   #:methods Expr
   ;; XXX This is the ugliest part.
-  (define ec (or (current-ec)
-                 (error '$dref "Cannot reference declaration outside of emit")))
-  (ec-add-decl! ec d #f)
-  (define (pp) (pp:text (hash-ref (emit-context-decl->name ec) d)))
+  (ec-add-decl! (current-ec*) d #f)
+  (define (pp) (pp:text ((Decl-name d))))
   (define (ty) ((Decl-ty d)))
   (define (lval?) #t)
   (define (h! !) (void)))
@@ -1102,7 +1100,14 @@
   #:procedure $dref-$%app
   #:methods Decl
   (define (ty) pty)
-  (define (name) (gencsym hn))
+
+  (define default-name (gencsym hn))
+  (define (name)
+    (or (hash-ref (emit-context-decl->name (current-ec*))
+                  this
+                  #f)
+        default-name))
+  
   (define (visit! #:headers! headers! #:global? global? #:name n)
     (define maybe-static
       (if global? pp:empty (pp:h-append (pp:text "static") pp:space)))
@@ -1188,6 +1193,9 @@
                 (make-hasheq)
                 (make-hasheq)))
 (define current-ec (make-parameter #f))
+(define (current-ec*)
+  (or (current-ec)
+      (error 'Decl "Cannot reference declaration outside of emit")))
 (define (ec-add-decl! ec d n)
   (define ds (emit-context-decls ec))
   (unless (set-member? ds d)
