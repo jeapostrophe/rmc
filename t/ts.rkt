@@ -19,8 +19,29 @@
   (Union (list (cons 'f F64)
                (cons 'u UI64))))
 
+#;
+(define ListOfUI8
+  (Struct (list (cons 'data UI8)
+                (cons 'next (Ptr (D ListOfUI8))))))
+
 (define TESTS
   (list
+   #;
+   (a-test ($let* ([ListOfUI8 l1]
+                   [ListOfUI8 l2]
+                   [ListOfUI8 l3])
+                  ($set! ($@: l1 #:data) ($v UI8 1))
+                  ($set! ($@: l1 #:next) ($& l2))
+                  ($set! ($@: l2 #:data) ($v UI8 2))
+                  ($set! ($@: l2 #:next) ($& l3))
+                  ($set! ($@: l3 #:data) ($v UI8 3))
+                  ($set! ($@: l3 #:next) $NULL)
+                  ($do ($printf ($v "%u %u %u\n")
+                                ($@: l1 #:data)
+                                ($@: l1 #:next #:data)
+                                ($@: l1 #:next #:next #:data))))
+           (list "1 2 3"))
+
    (let ()
      (for/list ([t*s
                  (in-list
@@ -59,7 +80,7 @@
                     ($do ($printf ($v "%f %llu\n") ($@: f #:f) ($@: f #:u))))
              (list "3.140000 4614253070214989087"
                    "0.000000 3")))
-   
+
    (let ()
      (define (cmp e)
        ($let* ([Bool i e])

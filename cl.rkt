@@ -66,6 +66,7 @@
   [pp:init
    (-> (or/c #f pp:doc?))])
 
+;; XXX Deal with Any on RHS
 (define-class Any
   #:fields
   #:methods Type
@@ -356,6 +357,7 @@
   (define pp:val pp:never)
   (define (pp:init) #f))
 
+;; XXX Deal with Extern on RHS
 (define-class Extern
   #:fields
   [h CHeader?]
@@ -1054,6 +1056,23 @@
 
 (define ($dref-$%app d args)
   ($%app ($dref d) args))
+
+#;
+(define-class $%typedef-struct
+  #:fields
+  [hn symbol?]
+  [sty *Struct?]
+  #:methods Decl
+  (define (hint) hn)
+  (define (ty) sty)
+  (define (name) (gencsym hn))
+  (define (visit! #:headers! ! #:global? global? #:name n)
+    ((Type-h! sty) !)
+    (λ (#:proto-only? po?)
+      (if po?
+          (pp:h-append (pp:text "struct") pp:space)
+          )))
+  )
 
 (define-class $extern
   #:fields
