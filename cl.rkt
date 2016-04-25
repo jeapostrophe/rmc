@@ -9,6 +9,7 @@
          racket/contract/combinator
          racket/match
          racket/list
+         racket/bool
          syntax/parse/define
          "class.rkt")
 
@@ -18,6 +19,13 @@
 (define (CName? x)
   (and (string? x)
        (regexp-match #rx"^[_a-zA-Z][_a-zA-Z0-9]*$" x)))
+
+(define field? symbol?)
+(define field=? symbol=?)
+(define field->string symbol->string)
+(define (keyword->field k)
+  (string->symbol (keyword->string k)))
+(define (pp:field f) (pp:text (field->string f)))
 
 (define-srcloc-struct CHeader
   [cflags (listof string?)]
@@ -54,7 +62,9 @@
        boolean?)]
   [pp:val
    (-> any/c
-       pp:doc?)])
+       pp:doc?)]
+  [pp:init
+   (-> (or/c #f pp:doc?))])
 
 (define-class Any
   #:fields
@@ -66,7 +76,8 @@
   (define (h! !) (void))
   (define (val? x) #f)
   (define (pp:val x)
-    (error 'Any "Values cannot be printed")))
+    (error 'Any "Values cannot be printed"))
+  (define (pp:init) #f))
 
 (define (pp:ty-name t n p)
   (define tp
@@ -82,9 +93,10 @@
 
 (define-class Literal
   #:fields
-  [lit string?]
   [v? (-> any/c boolean?)]
   [ppv (-> any/c pp:doc?)]
+  [ppi (or/c false/c pp:doc?)]
+  [lit string?]
   #:methods Type
   (define (name) lit)
   (define (pp #:name n #:ptrs p)
@@ -94,14 +106,18 @@
     (and (Literal? t)
          (equal? lit (Literal-lit t))))
   (define (val? x) (v? x))
-  (define (pp:val v) (ppv v)))
+  (define (pp:val v) (ppv v))
+  (define (pp:init) ppi))
 
 (define (pp:char-val c)
   (pp:text (number->string (char->integer c))))
 (define (never? x) #f)
 
-(define-class-alias Char (Literal "char" char? pp:char-val))
-(define-class-alias Void (Literal "void" never? pp:never))
+(define-class-alias Char (Literal char? pp:char-val (pp:text "0") "char"))
+
+(define-class-alias Opaque (Literal never? pp:never #f))
+
+(define-class-alias Void (Opaque "void"))
 (define Void? (Type-eq Void))
 
 (define-class Int
@@ -125,7 +141,9 @@
          (<= (integer-length x)
              (- bits (if signed? 1 0)))))
   (define (pp:val v)
-    (pp:text (number->string v))))
+    (pp:text (number->string v)))
+  (define (pp:init)
+    (pp:text "0")))
 
 (define (Int-unsigned? t)
   (not (Int-signed? t)))
@@ -167,6 +185,11 @@
                   (regexp-replace #rx"f" (number->string v) "e"))
                  (match bits
                    [32 (pp:text "f")]
+                   [64 pp:empty])))
+  (define (pp:init)
+    (pp:h-append (pp:text "0.0")
+                 (match bits
+                   [32 (pp:text "f")]
                    [64 pp:empty]))))
 
 (define-class-alias F32 (Float 32))
@@ -203,6 +226,10 @@
   (define (pp:val v)
     (if k
         (error 'pp:never)
+        (pp:text "NULL")))
+  (define (pp:init)
+    (if k
+        (pp:text "{0}")
         (pp:text "NULL"))))
 
 (define-class-alias Ptr (*Ptr #f))
@@ -211,7 +238,86 @@
   (and (*Ptr? x)
        (*Ptr-k x)))
 
-;; XXX Struct Union
+(define-class *Struct
+  #:fields
+  [union? boolean?]
+  [fs (and/c (listof (cons/c field? Type?))
+             (flat-named-contract
+              "unique fields"
+              (λ (x)
+                (define fs (map car x))
+                (not (check-duplicates fs field=?)))))]
+  #:methods Type
+  (define (name)
+    (list 'struct union?
+          (for/list ([f (in-list fs)])
+            (cons (car f) ((Type-name (cdr f)))))))
+  (define (eq t)
+    (and (*Struct? t)
+         (eq? union? (*Struct-union? t))
+         (for/and ([f (in-list fs)]
+                   [tf (in-list (*Struct-fs t))])
+           (and (field=? (car f) (car tf))
+                ((Type-eq (cdr f)) (cdr tf))))))
+  (define (pp #:name n #:ptrs p)
+    (pp:h-append
+     (if union?
+         (pp:text "union")
+         (pp:text "struct"))
+     pp:space
+     pp:lbrace
+     (pp:nest NEST
+              (pp:h-append pp:soft-line
+                           (apply pp:vb-append
+                                  (for/list ([f (in-list fs)])
+                                    (pp:h-append
+                                     ((Type-pp (cdr f))
+                                      #:name (field->string (car f))
+                                      #:ptrs 0)
+                                     (pp:char #\;))))))
+     pp:soft-line
+     pp:rbrace pp:space
+     (pp:text (make-string p #\*))
+     (if n (pp:text n) pp:empty)))
+  (define (h! !)
+    (for ([f (in-list fs)])
+      ((Type-h! (cdr f)) !)))
+  (define (val? x) #f)
+  (define pp:val pp:never)
+  (define (pp:init)
+    (cond
+      [union?
+       (pp:text "{0}")]
+      [else
+       (let/ec esc
+         (pp:hs-append
+          pp:lbrace
+          (apply pp:hs-append
+                 (pp:apply-infix
+                  pp:comma
+                  (for/list ([f (in-list fs)])
+                    (or ((Type-pp:init (cdr f)))
+                        (esc #f)))))
+          pp:rbrace))])))
+
+(define (StructField/c ty)
+  (λ (f)
+    (*struct-field-ty ty f)))
+
+(define (*struct-field-ty t f)
+  (cond
+    [(Any? t)
+     Any]
+    [else
+     (for/or ([tf (*Struct-fs t)]
+              #:when (field=? (car tf) f))
+       (cdr tf))]))
+
+(define (*struct-expr-field-ty e f)
+  (*struct-field-ty ((Expr-ty e)) f))
+
+(define-class-alias Struct (*Struct #f))
+(define-class-alias Union (*Struct #t))
 
 (define-class Fun
   #:fields
@@ -247,9 +353,28 @@
     (for ([d (in-list dom)])
       ((Type-h! d) !)))
   (define (val? x) #f)
-  (define pp:val pp:never))
+  (define pp:val pp:never)
+  (define (pp:init) #f))
 
-;; XXX Opaque Extern
+(define-class Extern
+  #:fields
+  [h CHeader?]
+  [st Type?]
+  #:methods Type
+  (define (name) ((Type-name st)))
+  (define (pp #:name n #:ptrs p)
+    ((Type-pp st) #:name n #:ptrs p))
+  (define (h! !)
+    (! h)
+    ((Type-h! st) !))
+  (define (eq t)
+    ((Type-eq st) t))
+  (define (val? x)
+    ((Type-val? st) x))
+  (define (pp:val v)
+    ((Type-pp:val st) v))
+  (define (pp:init)
+    ((Type-pp:init st))))
 
 (define-class Seal*
   #:fields
@@ -273,7 +398,9 @@
   (define (pp:val v)
     (if ppv
         (ppv v)
-        ((Type-pp:val st) v))))
+        ((Type-pp:val st) v)))
+  (define (pp:init)
+    ((Type-pp:init st))))
 
 (define-class-alias Seal (Seal* #f #f))
 
@@ -287,13 +414,6 @@
 
 (define (gencsym [s 'c])
   (symbol->string (gensym (regexp-replace* #rx"[^A-Za-z_0-9]" (format "_~a" s) "_"))))
-
-(define (Compound? t)
-  (or (Array? t)
-      ;(Struct? t) ;; XXX
-      ;(Union? t) ;; XXX
-      (and (Seal*? t)
-           (Compound? (Seal*-st t)))))
 
 ;;; Expressions
 
@@ -344,7 +464,30 @@
                               (λ (x)
                                 ((Expr-lval? x))))))
 
-;; XXX Exprs: $offsetof $fref
+(define-class $offsetof
+  #:fields
+  [arg-ty (or/c Any? *Struct?)]
+  [f (StructField/c arg-ty)]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append pp:lparen (pp:text "offsetof") pp:lparen
+                 ((Type-pp arg-ty) #:name #f #:ptrs 0) pp:comma
+                 (pp:field f) pp:rparen pp:rparen))
+  (define (ty) Size)
+  (define (lval?) #f)
+  (define (h! !) ((Type-h! arg-ty) !)))
+
+(define-class $fref
+  #:fields
+  [e (Expr?/c "struct or union" *Struct?)]
+  [f (StructField/c ((Expr-ty e)))]
+  #:methods Expr
+  (define (pp)
+    (pp:h-append pp:lparen ((Expr-pp e))
+                 (pp:char #\.) (pp:field f) pp:rparen))
+  (define (ty) (*struct-expr-field-ty e f))
+  (define (lval?) #t)
+  (define (h! !) ((Expr-h! e) !)))
 
 (define-class $sizeof
   #:fields
@@ -404,7 +547,7 @@
              [(_ the-e i (... ...) k:keyword)
               (quasisyntax/loc stx
                 ($fref #,(syntax/loc stx (name the-e i (... ...)))
-                       (keyword->symbol 'k)))]
+                       (keyword->field 'k)))]
              [(_ the-e i (... ...) a:expr)
               (quasisyntax/loc stx
                 ($aref #,(syntax/loc stx (name the-e i (... ...)))
@@ -849,11 +992,12 @@
   (define var (Var vty (gencsym hn)))  
   (define body (bodyf var))
   (define (pp)
+    (define the-init ((Type-pp:init vty)))
     (pp:h-append pp:lbrace pp:space ((Var-pp var))
-                 pp:space (pp:char #\=) pp:space
-                 (if (Compound? vty)
-                     (pp:text "{0}")
-                     (pp:text "0"))
+                 (if the-init
+                     (pp:h-append pp:space (pp:char #\=) pp:space
+                                  the-init)
+                     pp:empty)
                  pp:semi
                  (pp:nest NEST (pp:h-append pp:line ((Stmt-pp body)))) pp:rbrace))
   (define (h! !)
@@ -1016,6 +1160,8 @@
 
 (define <stdint.h>
   (CHeader '() '() '() "<stdint.h>" '()))
+(define <stddef.h>
+  (CHeader '() '() '() "<stddef.h>" '()))
 
 (struct emit-context
   (headers
@@ -1025,7 +1171,7 @@
    decl->proto-pp
    decl->pp))
 (define (make-emit-context)
-  (emit-context (mutable-seteq <stdint.h>)
+  (emit-context (mutable-seteq <stdint.h> <stddef.h>)
                 (mutable-seteq)
                 (make-hasheq)
                 (make-hasheq)

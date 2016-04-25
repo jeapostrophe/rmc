@@ -10,6 +10,15 @@
 (define (band a b) (and a b))
 (define (bor a b) (or a b))
 
+;; XXX test a recursive struct/union
+
+(define Posn
+  (Struct (list (cons 'x UI32)
+                (cons 'y UI32))))
+(define FloatInt
+  (Union (list (cons 'f F64)
+               (cons 'u UI64))))
+
 (define TESTS
   (list
    (let ()
@@ -22,10 +31,35 @@
                         (cons (Ptr UI8) 8) (cons (Ptr UI64) 8)
                         (cons (Arr 4 UI8) 4) (cons (Arr 4 UI64) 32)
                         (cons (Ptr (Fun (list UI8 UI8) UI8)) 8)
-                        (cons Bool 1)))])
+                        (cons Bool 1)
+                        (cons Posn 8) (cons FloatInt 8)))])
        (match-define (cons t s) t*s)
        (a-test ($do ($printf ($v "%lu\n") ($sizeof t)))
-               (list (number->string s)))))   
+               (list (number->string s)))))
+
+   (let ()
+     (a-test ($begin ($do ($printf ($v "%lu\n") ($offsetof Posn 'x)))
+                     ($do ($printf ($v "%lu\n") ($offsetof Posn 'y)))
+                     ($do ($printf ($v "%lu\n") ($offsetof FloatInt 'f)))
+                     ($do ($printf ($v "%lu\n") ($offsetof FloatInt 'u))))
+             (list "0" "4" "0" "0")))
+
+   (let ()
+     (a-test ($let* ([Posn p])
+                    ($set! ($@: p #:x) ($v UI32 1))
+                    ($set! ($@: p #:y) ($v UI32 2))
+                    ($do ($printf ($v "%u %u\n") ($@: p #:x) ($@: p #:y))))
+             (list "1 2")))
+
+   (let ()
+     (a-test ($let* ([FloatInt f])
+                    ($set! ($@: f #:f) ($v F64 3.14))
+                    ($do ($printf ($v "%f %llu\n") ($@: f #:f) ($@: f #:u)))
+                    ($set! ($@: f #:u) ($v UI64 3))
+                    ($do ($printf ($v "%f %llu\n") ($@: f #:f) ($@: f #:u))))
+             (list "3.140000 4614253070214989087"
+                   "0.000000 3")))
+   
    (let ()
      (define (cmp e)
        ($let* ([Bool i e])
