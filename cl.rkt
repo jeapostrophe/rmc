@@ -1044,8 +1044,6 @@
    (-> Type?)]
   [name
    (-> CName?)]
-  [hint
-   (-> (or/c false/c symbol?))]
   [visit!
    (-> #:headers! (-> CHeader? void?)
        #:global? boolean?
@@ -1063,7 +1061,6 @@
   [hn symbol?]
   [sty *Struct?]
   #:methods Decl
-  (define (hint) hn)
   (define (ty) sty)
   (define (name) (gencsym hn))
   (define (visit! #:headers! ! #:global? global? #:name n)
@@ -1081,7 +1078,6 @@
   [ety Type?]
   #:procedure $dref-$%app
   #:methods Decl
-  (define (hint) #f)
   (define (ty) ety)
   (define (name) n)
   (define (visit! #:headers! ! #:global? global? #:name n)
@@ -1105,7 +1101,6 @@
                                       ((Stmt-ret? x)))))))]
   #:procedure $dref-$%app
   #:methods Decl
-  (define (hint) hn)
   (define (ty) pty)
   (define (name) (gencsym hn))
   (define (visit! #:headers! headers! #:global? global? #:name n)
