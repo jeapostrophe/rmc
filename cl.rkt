@@ -1197,10 +1197,6 @@
     (hash-set! d->pp d (ppf #:proto-only? #f)))
   (when repeat?
     (ec-fixed-point! ec)))
-(define (pp:decl-proto ec d)
-  (hash-ref (emit-context-decl->proto-pp ec) d))
-(define (pp:decl ec d)
-  (hash-ref (emit-context-decl->pp ec) d))
 
 (define-class $exe
   #:fields
@@ -1212,28 +1208,28 @@
       (ec-global-name! main "main")
       (ec-add-decl! main)
       (ec-fixed-point! ec))
-    (define cflags
+
+    (define (h-collect f)
       (append*
        (for/list ([i (in-set (emit-context-headers ec))])
-         (CHeader-cflags i))))
-    (define ldflags
-      (append*
-       (for/list ([i (in-set (emit-context-headers ec))])
-         (CHeader-ldflags i))))
+         (f i))))
+    
+    (define (v-append-hash ht)
+      (pp:v-append
+       (apply pp:v-append
+              (for/list ([pp (in-hash-values ht)])
+                pp))
+       pp:line))
+    
     (emit-result
-     cflags
-     ldflags
+     (h-collect CHeader-cflags)
+     (h-collect CHeader-ldflags)
      (pp:v-append (apply pp:v-append
                          (for/list ([i (in-set (emit-context-headers ec))])
                            (pp:header i)))
                   pp:line
-                  (apply pp:v-append
-                         (for/list ([i (in-set (emit-context-decls ec))])
-                           (pp:decl-proto ec i)))
-                  pp:line
-                  (apply pp:v-append
-                         (for/list ([i (in-set (emit-context-decls ec))])
-                           (pp:h-append (pp:decl ec i) pp:line)))))))
+                  (v-append-hash (emit-context-decl->proto-pp ec))
+                  (v-append-hash (emit-context-decl->pp ec))))))
 
 ;; Compiler
 
