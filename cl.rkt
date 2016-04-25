@@ -1216,9 +1216,7 @@
     (define n (hash-ref! d->n d (λ () ((Decl-name d)))))
     (define ppf
       ((Decl-visit! d)
-       #:headers!
-       (λ (h)
-         (set-add! hs h))
+       #:headers! (λ (h) (set-add! hs h))
        #:global? (string=? n "main")
        #:name n))
     (hash-set! d->proto-pp d (ppf #:proto-only? #t))
