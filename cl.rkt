@@ -1162,14 +1162,22 @@
 (define <stddef.h>
   (CHeader '() '() '() "<stddef.h>" '()))
 
+(define-syntax-rule (while t . b)
+  (let loop ()
+    (when t
+      (begin . b)
+      (loop))))
+
 (struct emit-context
   (headers
+   header-pps
    decls
    decl->gname
    decl->proto-pp
    decl->pp))
 (define (make-emit-context)
-  (emit-context (mutable-seteq <stdint.h> <stddef.h>)
+  (emit-context (mutable-seteq)
+                (mutable-seteq)
                 (mutable-seteq)
                 (make-hasheq)
                 (make-hasheq)
@@ -1185,18 +1193,24 @@
 (define (ec-add-decl! d)
   (set-add! (emit-context-decls (current-ec*)) d))
 (define (ec-fixed-point! ec)
-  (define repeat? #f)
   (define hs (emit-context-headers ec))
+  (define h-pp (emit-context-header-pps ec))
+  (define (h! h)    
+    (set-add! h-pp (pp:header h))
+    (set-add! hs h))
+  (h! <stdint.h>)
+  (h! <stddef.h>)
   (define d->proto-pp (emit-context-decl->proto-pp ec))
   (define d->pp (emit-context-decl->pp ec))
-  (for ([d (in-set (emit-context-decls ec))]
-        #:unless (hash-has-key? d->pp d))
-    (set! repeat? #t)
-    (define ppf ((Decl-visit! d) #:headers! (λ (h) (set-add! hs h))))
-    (hash-set! d->proto-pp d (ppf #:proto-only? #t))
-    (hash-set! d->pp d (ppf #:proto-only? #f)))
-  (when repeat?
-    (ec-fixed-point! ec)))
+  (let repeat ()
+    (and
+     (for/or ([d (in-set (emit-context-decls ec))]
+              #:unless (hash-has-key? d->pp d))
+       (define ppf
+         ((Decl-visit! d) #:headers! h!))
+       (hash-set! d->proto-pp d (ppf #:proto-only? #t))
+       (hash-set! d->pp d (ppf #:proto-only? #f)))
+     (repeat))))
 
 (define-class $exe
   #:fields
@@ -1213,23 +1227,23 @@
       (append*
        (for/list ([i (in-set (emit-context-headers ec))])
          (f i))))
-    
-    (define (v-append-hash ht)
+
+    (define (v-append-l l)
       (pp:v-append
-       (apply pp:v-append
-              (for/list ([pp (in-hash-values ht)])
-                pp))
+       (apply pp:v-append l)
        pp:line))
+    (define (v-append-hash ht)
+      (v-append-l (hash-values ht)))
+    (define (v-append-set s)
+      (v-append-l (set->list s)))
     
     (emit-result
      (h-collect CHeader-cflags)
      (h-collect CHeader-ldflags)
-     (pp:v-append (apply pp:v-append
-                         (for/list ([i (in-set (emit-context-headers ec))])
-                           (pp:header i)))
-                  pp:line
-                  (v-append-hash (emit-context-decl->proto-pp ec))
-                  (v-append-hash (emit-context-decl->pp ec))))))
+     (pp:v-append
+      (v-append-set (emit-context-header-pps ec))
+      (v-append-hash (emit-context-decl->proto-pp ec))
+      (v-append-hash (emit-context-decl->pp ec))))))
 
 ;; Compiler
 
