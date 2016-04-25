@@ -627,12 +627,10 @@
   #:fields
   [d Decl?]
   #:methods Expr
-  ;; XXX This is the ugliest part.
-  (ec-add-decl! d)
   (define (pp) (pp:text ((Decl-name d))))
   (define (ty) ((Decl-ty d)))
   (define (lval?) #t)
-  (define (h! !) (void)))
+  (define (h! !) (ec-add-decl! d)))
 
 (define-class Var
   #:fields

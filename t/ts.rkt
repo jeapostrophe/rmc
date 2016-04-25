@@ -4,8 +4,7 @@
          "../h/libc.rkt"
          "fac.rkt")
 
-(struct a-test* (stmt-f output))
-(define-syntax-rule (a-test stmt output) (a-test* (λ () stmt) output))
+(struct a-test (stmt-f output))
 
 (define (band a b) (and a b))
 (define (bor a b) (or a b))
@@ -318,7 +317,7 @@
     (define main
       ($proc () SI32
              ($begin
-              ((a-test*-stmt-f t))
+              (a-test-stmt-f t)
               ($ret ($v SI32 0)))))
 
     (define this
@@ -331,7 +330,7 @@
                        (with-check-details (['fail "compilation failed"])
                          (check #f)))])
       (define actual-out (string-split (run&capture this) "\n"))
-      (define expected-out (a-test*-output t))
+      (define expected-out (a-test-output t))
 
       (with-check-details ([check-inform (λ () (set! emit? #t))])
         (check (length actual-out) (length expected-out))
