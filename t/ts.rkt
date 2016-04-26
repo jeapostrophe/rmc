@@ -9,36 +9,29 @@
 (define (band a b) (and a b))
 (define (bor a b) (or a b))
 
-;; XXX test a recursive struct/union
-
 (define Posn
-  (Struct (list (cons 'x UI32)
-                (cons 'y UI32))))
+  (Struct [x UI32] [y UI32]))
 (define FloatInt
-  (Union (list (cons 'f F64)
-               (cons 'u UI64))))
+  (Union [f F64] [u UI64]))
 
-#;
 (define ListOfUI8
-  (Struct (list (cons 'data UI8)
-                (cons 'next (Ptr (D ListOfUI8))))))
+  (Struct [next (Ptr ListOfUI8)] [data UI8] [padding (Arr 7 UI8)]))
 
 (define TESTS
   (list
-   #;
    (a-test ($let* ([ListOfUI8 l1]
                    [ListOfUI8 l2]
                    [ListOfUI8 l3])
-                  ($set! ($@: l1 #:data) ($v UI8 1))
-                  ($set! ($@: l1 #:next) ($& l2))
-                  ($set! ($@: l2 #:data) ($v UI8 2))
-                  ($set! ($@: l2 #:next) ($& l3))
-                  ($set! ($@: l3 #:data) ($v UI8 3))
-                  ($set! ($@: l3 #:next) $NULL)
+                  ($set! ($@ l1 #:data) ($v UI8 1))
+                  ($set! ($@ l1 #:next) ($& l2))
+                  ($set! ($@ l2 #:data) ($v UI8 2))
+                  ($set! ($@ l2 #:next) ($& l3))
+                  ($set! ($@ l3 #:data) ($v UI8 3))
+                  ($set! ($@ l3 #:next) $NULL)
                   ($do ($printf ($v "%u %u %u\n")
-                                ($@: l1 #:data)
-                                ($@: l1 #:next #:data)
-                                ($@: l1 #:next #:next #:data))))
+                                ($@ l1 #:data)
+                                ($@ l1 #:next -> #:data)
+                                ($@ l1 #:next -> #:next -> #:data))))
            (list "1 2 3"))
 
    (let ()
@@ -66,17 +59,17 @@
 
    (let ()
      (a-test ($let* ([Posn p])
-                    ($set! ($@: p #:x) ($v UI32 1))
-                    ($set! ($@: p #:y) ($v UI32 2))
-                    ($do ($printf ($v "%u %u\n") ($@: p #:x) ($@: p #:y))))
+                    ($set! ($@ p #:x) ($v UI32 1))
+                    ($set! ($@ p #:y) ($v UI32 2))
+                    ($do ($printf ($v "%u %u\n") ($@ p #:x) ($@ p #:y))))
              (list "1 2")))
 
    (let ()
      (a-test ($let* ([FloatInt f])
-                    ($set! ($@: f #:f) ($v F64 3.14))
-                    ($do ($printf ($v "%f %llu\n") ($@: f #:f) ($@: f #:u)))
-                    ($set! ($@: f #:u) ($v UI64 3))
-                    ($do ($printf ($v "%f %llu\n") ($@: f #:f) ($@: f #:u))))
+                    ($set! ($@ f #:f) ($v F64 3.14))
+                    ($do ($printf ($v "%f %llu\n") ($@ f #:f) ($@ f #:u)))
+                    ($set! ($@ f #:u) ($v UI64 3))
+                    ($do ($printf ($v "%f %llu\n") ($@ f #:f) ($@ f #:u))))
              (list "3.140000 4614253070214989087"
                    "0.000000 3")))
 
@@ -93,8 +86,8 @@
                     ($set! ($aref a ($v UI8 1)) ($v UI8 2))
                     ($set! ($aref a ($v UI8 2)) ($v UI8 3))
                     ($set! ($aref a ($v UI8 3)) ($v UI8 4))
-                    ($do ($printf ($v "%u\n") ($@: a ($v UI8 2))))
-                    ($do ($printf ($v "%u\n") ($@ a)))
+                    ($do ($printf ($v "%u\n") ($@ a ($v UI8 2))))
+                    ($do ($printf ($v "%u\n") ($@ * a)))
                     ($begin (cmp ($!= a b))
                             (cmp ($!= a a))
                             (cmp ($== a b))
@@ -117,10 +110,10 @@
                g ($& add3)]
               [UI8 two ($v UI8 2)])
              ($do ($printf ($v "%u\n") (add2 two)))
-             ($do ($printf ($v "%u\n") ($app ($@ f) two)))
+             ($do ($printf ($v "%u\n") ($app ($@ * f) two)))
              ($do ($printf ($v "%u\n") ($app f two)))
              ($do ($printf ($v "%u\n") (add3 two)))
-             ($do ($printf ($v "%u\n") ($app ($@ g) two)))
+             ($do ($printf ($v "%u\n") ($app ($@ * g) two)))
              ($do ($printf ($v "%u\n") ($app g two)))
              ($do ($printf ($v "%d\n")
                            ($ife ($== f f) ($v UI8 1) ($v UI8 0))))
@@ -146,9 +139,11 @@
                   ($do ($printf ($v "%d\n")
                                 ($ife ($!= ip1 jp) ($v UI8 1) ($v UI8 0))))
                   ($do ($printf ($v "%d\n")
-                                ($ife ($== ($@ ip1) ($@ jp)) ($v UI8 1) ($v UI8 0))))
+                                ($ife ($== ($@ * ip1) ($@ * jp))
+                                      ($v UI8 1) ($v UI8 0))))
                   ($do ($printf ($v "%d\n")
-                                ($ife ($== ($@ ip1) ($@ kp)) ($v UI8 1) ($v UI8 0)))))
+                                ($ife ($== ($@ * ip1) ($@ * kp))
+                                      ($v UI8 1) ($v UI8 0)))))
            (list "1" "0" "0" "1" "1" "0"))
 
    (for/list ([$op (in-list (list $and $or))]

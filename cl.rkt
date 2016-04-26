@@ -41,7 +41,7 @@
                (apply pp:v-append (map pp:text post))))
 
 ;;; Values
-(define-srcloc-struct $NULL)
+(define the-NULL (gensym))
 
 ;;; Types
 
@@ -66,7 +66,14 @@
   [pp:init
    (-> (or/c #f pp:doc?))])
 
-;; XXX Deal with Any on RHS
+(define (Type*-eq x y)
+  (or (Any? x)
+      (Any? y)
+      (eq? x y)
+      ((Type-eq x) y)))
+(define ((Type*-eq-p x) y)
+  (Type*-eq x y))
+
 (define-class Any
   #:fields
   #:methods Type
@@ -119,7 +126,7 @@
 (define-class-alias Opaque (Literal never? pp:never #f))
 
 (define-class-alias Void (Opaque "void"))
-(define Void? (Type-eq Void))
+(define Void? (Type*-eq-p Void))
 
 (define-class Int
   #:fields
@@ -217,13 +224,13 @@
   (define (h! !) ((Type-h! st) !))
   (define (eq t)
     (and (*Ptr? t)
-         ((Type-eq st) (*Ptr-st t))
+         (Type*-eq st (*Ptr-st t))
          (or (not k)
              (<= k (*Ptr-k t)))))
   (define (val? x)
     (if k
         #f
-        ($NULL? x)))
+        (eq? the-NULL x)))
   (define (pp:val v)
     (if k
         (error 'pp:never)
@@ -241,50 +248,73 @@
 
 (define-class *Struct
   #:fields
+  [hn symbol?]
   [union? boolean?]
-  [fs (and/c (listof (cons/c field? Type?))
+  [fs (and/c (listof (cons/c field? (-> Type?)))
              (flat-named-contract
               "unique fields"
               (λ (x)
                 (define fs (map car x))
                 (not (check-duplicates fs field=?)))))]
   #:methods Type
+  (define cn (gencsym hn))
   (define (name)
-    (list 'struct union?
+    (list (if union? 'union 'struct)
+          cn
           (for/list ([f (in-list fs)])
-            (cons (car f) ((Type-name (cdr f)))))))
+            (cons (car f)
+                  ;; ((Type-name ((cdr f))))
+                  ((cdr f))))))
   (define (eq t)
     (and (*Struct? t)
          (eq? union? (*Struct-union? t))
          (for/and ([f (in-list fs)]
                    [tf (in-list (*Struct-fs t))])
            (and (field=? (car f) (car tf))
-                ((Type-eq (cdr f)) (cdr tf))))))
+                (Type*-eq ((cdr f)) ((cdr tf)))))))
+
+  (define kind-pp
+    (if union?
+        (pp:text "union")
+        (pp:text "struct")))
+  (define cn-pp (pp:text cn))
+  
   (define (pp #:name n #:ptrs p)
     (pp:h-append
-     (if union?
-         (pp:text "union")
-         (pp:text "struct"))
-     pp:space
-     pp:lbrace
-     (pp:nest NEST
-              (pp:h-append pp:soft-line
-                           (apply pp:vb-append
-                                  (for/list ([f (in-list fs)])
-                                    (pp:h-append
-                                     ((Type-pp (cdr f))
-                                      #:name (field->string (car f))
-                                      #:ptrs 0)
-                                     (pp:char #\;))))))
-     pp:soft-line
-     pp:rbrace pp:space
-     (pp:text (make-string p #\*))
-     (if n (pp:text n) pp:empty)))
+     kind-pp pp:space cn-pp
+     (if (zero? p)
+         pp:empty
+         (pp:h-append pp:space (pp:text (make-string p #\*))))
+     (if n
+         (pp:h-append pp:space (pp:text n))
+         pp:empty)))
+
   (define (h! !)
-    (for ([f (in-list fs)])
-      ((Type-h! (cdr f)) !)))
+    (define forward-decl-pp
+      (pp:h-append kind-pp pp:space cn-pp pp:semi))
+    (define decl-pp
+      (pp:h-append
+       kind-pp pp:space cn-pp pp:space
+       pp:lbrace
+       (pp:nest NEST
+                (pp:h-append pp:line
+                             (apply pp:v-append
+                                    (for/list ([f (in-list fs)])
+                                      (pp:h-append
+                                       ((Type-pp ((cdr f)))
+                                        #:name (field->string (car f))
+                                        #:ptrs 0)
+                                       pp:semi)))))
+       pp:line
+       pp:rbrace pp:semi))
+    
+    (when (ec-struct! this forward-decl-pp decl-pp)
+      (for ([f (in-list fs)])
+        ((Type-h! ((cdr f))) !))))
+
   (define (val? x) #f)
   (define pp:val pp:never)
+  
   (define (pp:init)
     (cond
       [union?
@@ -297,7 +327,7 @@
                  (pp:apply-infix
                   pp:comma
                   (for/list ([f (in-list fs)])
-                    (or ((Type-pp:init (cdr f)))
+                    (or ((Type-pp:init ((cdr f))))
                         (esc #f)))))
           pp:rbrace))])))
 
@@ -312,13 +342,28 @@
     [else
      (for/or ([tf (*Struct-fs t)]
               #:when (field=? (car tf) f))
-       (cdr tf))]))
+       ((cdr tf)))]))
 
 (define (*struct-expr-field-ty e f)
   (*struct-field-ty ((Expr-ty e)) f))
 
-(define-class-alias Struct (*Struct #f))
-(define-class-alias Union (*Struct #t))
+(define-syntax (Struct stx)
+  (syntax-parse stx
+    [(_ [f:id ty:expr] ...)
+     (quasisyntax/loc stx
+       (*Struct (or '#,(syntax-local-name) (gensym 'struct))
+                #f
+                (list (cons 'f (λ () ty)) ...)))]))
+(provide Struct)
+
+(define-syntax (Union stx)
+  (syntax-parse stx
+    [(_ [f:id ty:expr] ...)
+     (quasisyntax/loc stx
+       (*Struct (or '#,(syntax-local-name) (gensym 'union))
+                #t
+                (list (cons 'f (λ () ty)) ...)))]))
+(provide Union)
 
 (define-class Fun
   #:fields
@@ -336,8 +381,8 @@
            (and (= (length dom) (length tdom))
                 (for/and ([t (in-list dom)]
                           [s (in-list tdom)])
-                  ((Type-eq t) s))))
-         ((Type-eq (Fun-rng t)) rng)))
+                  (Type*-eq t s))))
+         (Type*-eq (Fun-rng t) rng)))
   (define (pp #:name n #:ptrs p)
     (pp:h-append
      ((Type-pp rng) #:name #f #:ptrs 0)
@@ -370,7 +415,7 @@
     (! h)
     ((Type-h! st) !))
   (define (eq t)
-    ((Type-eq st) t))
+    (Type*-eq st t))
   (define (val? x)
     ((Type-val? st) x))
   (define (pp:val v)
@@ -392,7 +437,7 @@
   (define (eq t)
     (and (Seal*? t)
          (eq? tag (Seal*-tag t))
-         ((Type-eq st) (Seal*-st t))))
+         (Type*-eq st (Seal*-st t))))
   (define (val? x)
     (if v?
         (v? x)
@@ -433,7 +478,7 @@
 (define (Expr/c ty)
   (Expr?/c
    (format "~a type" ((Type-name ty)))
-   (Type-eq ty)))
+   (Type*-eq-p ty)))
 
 (define (Expr?/c lab ty?)
   (define name (format "Expr with ~a" lab))
@@ -536,33 +581,29 @@
   (define (lval?) #t)
   (define (h! !) ((Expr-h! e) !)))
 
-(define-syntax (define-$@ stx)
+(define-syntax ($@ stx)
   (syntax-parse stx
-    [(_ name:id the-e the-end)
+    [(_ e:expr)
      (syntax/loc stx
-       (begin
-         (define-syntax (name stx)
-           (syntax-parse stx
-             [(_ the-e)
-              (quasisyntax/loc stx
-                the-end)]
-             [(_ the-e i (... ...) k:keyword)
-              (quasisyntax/loc stx
-                ($fref #,(syntax/loc stx (name the-e i (... ...)))
-                       (keyword->field 'k)))]
-             [(_ the-e i (... ...) a:expr)
-              (quasisyntax/loc stx
-                ($aref #,(syntax/loc stx (name the-e i (... ...)))
-                       a))]))
-         (provide name)))]))
-
-(define-$@ $@  e ($pref e))
-(define-$@ $@: e e)
+       e)]
+    [(_ (~datum *) e:expr)
+     (syntax/loc stx
+       ($pref e))]
+    [(_ e ... (~datum ->))
+     (syntax/loc stx
+       ($pref ($@ e ...)))]
+    [(_ e ... a:expr)
+     (syntax/loc stx
+       ($aref ($@ e ...) a))]
+    [(_ e ... k:keyword)
+     (syntax/loc stx
+       ($fref ($@ e ...) (keyword->field 'k)))]))
+(provide $@)
 
 ;; XXX Generalize this to allow expanding/shrinking ints
 (define-class $cast
   #:fields
-  [t (Type-eq F64)]
+  [t (Type*-eq-p F64)]
   [e (Expr/c F32)]
   #:methods Expr
   (define (pp)
@@ -838,6 +879,8 @@
   (define (lval?) #f)
   (define (h! !)
     ((Type-h! vty) !)))
+
+(define-class-alias $NULL ($val (Ptr Any) the-NULL))
 
 (define (Fun-args/c f)
   (apply list/c (map Expr/c (Fun-dom f))))
@@ -1174,11 +1217,15 @@
    decls
    decl->gname
    decl->proto-pp
-   decl->pp))
+   decl->pp
+   struct->forward-pp
+   struct->def-pp))
 (define (make-emit-context)
   (emit-context (mutable-seteq)
                 (mutable-seteq)
                 (mutable-seteq)
+                (make-hasheq)
+                (make-hasheq)
                 (make-hasheq)
                 (make-hasheq)
                 (make-hasheq)))
@@ -1192,6 +1239,16 @@
   (hash-set! (emit-context-decl->gname (current-ec*)) d n))
 (define (ec-add-decl! d)
   (set-add! (emit-context-decls (current-ec*)) d))
+(define (ec-struct! s f d)
+  (define ec (current-ec*))
+  (define fpp (emit-context-struct->forward-pp ec))
+  (cond
+    [(hash-has-key? fpp s)
+     #f]
+    [else
+     (hash-set! fpp s f)
+     (hash-set! (emit-context-struct->def-pp ec) s d)
+     #t]))
 (define (ec-fixed-point! ec)
   (define hs (emit-context-headers ec))
   (define h-pp (emit-context-header-pps ec))
@@ -1243,6 +1300,8 @@
      (h-collect CHeader-ldflags)
      (pp:v-append
       (v-append-set (emit-context-header-pps ec))
+      (v-append-hash (emit-context-struct->forward-pp ec))
+      (v-append-hash (emit-context-struct->def-pp ec))
       (v-append-hash (emit-context-decl->proto-pp ec))
       (v-append-hash (emit-context-decl->pp ec))))))
 
