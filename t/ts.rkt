@@ -297,7 +297,7 @@
            '("24"))))
 
 (module+ test
-  (require "../check.rkt"
+  (require chk
            racket/string)
 
   (define (walk-tree f tt)
@@ -322,24 +322,24 @@
     (with-handlers ([exn:fail?
                      (λ (x)
                        (set! emit? #t)
-                       (with-check-details (['fail "compilation failed"])
-                         (check #f)))])
+                       (with-chk (['fail "compilation failed"])
+                         (chk #f)))])
       (define actual-out (string-split (run&capture this) "\n"))
       (define expected-out (a-test-output t))
 
-      (with-check-details ([check-inform (λ () (set! emit? #t))])
-        (check (length actual-out) (length expected-out))
+      (with-chk ([chk-inform! (λ () (set! emit? #t))])
+        (chk (length actual-out) (length expected-out))
         (for ([a (in-list actual-out)]
               [e (in-list expected-out)])
           (cond
             [(string? e)
-             (check a e)]
+             (chk a e)]
             [(number? e)
-             (check (string->number a) e)]
+             (chk (string->number a) e)]
             [else
-             (with-check-details (['fail "invalid expected"]
-                                  ['v (format "~e" e)])
-               (check #f))]))))
+             (with-chk (['fail "invalid expected"]
+                        ['v (format "~e" e)])
+               (chk #f))]))))
 
     (when emit?
       (emit! this)))
