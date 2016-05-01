@@ -327,7 +327,7 @@
       (define actual-out (string-split (run&capture this) "\n"))
       (define expected-out (a-test-output t))
 
-      (with-chk ([chk-inform! (λ () (set! emit? #t))])
+      (with-chk ([chk-inform! (λ (_) (set! emit? #t))])
         (chk (length actual-out) (length expected-out))
         (for ([a (in-list actual-out)]
               [e (in-list expected-out)])
