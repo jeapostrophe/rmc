@@ -5,10 +5,10 @@
 
 (define (cchk stmt output)
   (define main
-    ($proc () SI32
+    ($proc () S32
            ($begin
             stmt
-            ($ret ($v SI32 0)))))
+            ($ret ($v S32 0)))))
 
   (define this
     ($default-flags ($exe main)))

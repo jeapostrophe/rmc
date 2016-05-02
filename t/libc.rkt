@@ -4,7 +4,7 @@
          "../h/libc.rkt")
 
 (module+ test
-  (a-test ($begin ($do ($printf ($v "test")))
-                  ($unless ($== ($v SI32 0) (fflush stdin))
-                           ($do ($printf ($v "error!")))))
-          '("test")))
+  (cchk ($begin ($do ($printf ($v "test")))
+                ($unless ($== ($v S32 0) (fflush stdin))
+                         ($do ($printf ($v "error!")))))
+        '("test")))

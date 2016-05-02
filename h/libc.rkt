@@ -11,6 +11,6 @@
 
 (define fflush
   ($extern <stdio.h> "fflush"
-           (Fun (list (Ptr FILE)) SI32)))
+           (Fun (list (Ptr FILE)) S32)))
 
 (provide (all-defined-out))

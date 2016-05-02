@@ -162,19 +162,18 @@
 (define (Int-unsigned? t)
   (not (Int-signed? t)))
 
-;; XXX change to UX and SX
-(define-class-alias  UI8 (Int #f 8))
-(define-class-alias UI16 (Int #f 16))
-(define-class-alias UI32 (Int #f 32))
-(define-class-alias UI64 (Int #f 64))
+(define-class-alias  U8 (Int #f 8))
+(define-class-alias U16 (Int #f 16))
+(define-class-alias U32 (Int #f 32))
+(define-class-alias U64 (Int #f 64))
 
-(define-class-alias Size (UI64)
+(define-class-alias Size (U64)
   #; (Literal "size_t" never? pp:never))
 
-(define-class-alias  SI8 (Int #t 8))
-(define-class-alias SI16 (Int #t 16))
-(define-class-alias SI32 (Int #t 32))
-(define-class-alias SI64 (Int #t 64))
+(define-class-alias  S8 (Int #t 8))
+(define-class-alias S16 (Int #t 16))
+(define-class-alias S32 (Int #t 32))
+(define-class-alias S64 (Int #t 64))
 
 (define-class Float
   #:fields
@@ -459,7 +458,7 @@
 
 (define (pp:bool v)
   (pp:text (number->string (if v 1 0))))
-(define-class-alias Bool (Seal* boolean? pp:bool 'Bool UI8))
+(define-class-alias Bool (Seal* boolean? pp:bool 'Bool U8))
 
 (define (pp:cstring v)
   (pp:text (format "~v" v)))

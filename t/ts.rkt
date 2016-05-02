@@ -10,21 +10,21 @@
   (define (bor a b) (or a b))
 
   (define Posn
-    (Struct [x UI32] [y UI32]))
+    (Struct [x U32] [y U32]))
   (define FloatInt
-    (Union [f F64] [u UI64]))
+    (Union [f F64] [u U64]))
 
-  (define ListOfUI8
-    (Struct [next (Ptr ListOfUI8)] [data UI8] [padding (Arr 7 UI8)]))
+  (define ListOfU8
+    (Struct [next (Ptr ListOfU8)] [data U8] [padding (Arr 7 U8)]))
 
-  (cchk ($let* ([ListOfUI8 l1]
-                [ListOfUI8 l2]
-                [ListOfUI8 l3])
-               ($set! ($@ l1 #:data) ($v UI8 1))
+  (cchk ($let* ([ListOfU8 l1]
+                [ListOfU8 l2]
+                [ListOfU8 l3])
+               ($set! ($@ l1 #:data) ($v U8 1))
                ($set! ($@ l1 #:next) ($& l2))
-               ($set! ($@ l2 #:data) ($v UI8 2))
+               ($set! ($@ l2 #:data) ($v U8 2))
                ($set! ($@ l2 #:next) ($& l3))
-               ($set! ($@ l3 #:data) ($v UI8 3))
+               ($set! ($@ l3 #:data) ($v U8 3))
                ($set! ($@ l3 #:next) $NULL)
                ($do ($printf ($v "%u %u %u\n")
                              ($@ l1 #:data)
@@ -35,13 +35,13 @@
   (let ()
     (for ([t*s
            (in-list
-            (list (cons UI8 1) (cons UI16 2) (cons UI32 4) (cons UI64 8)
-                  (cons SI8 1) (cons SI16 2) (cons SI32 4) (cons SI64 8)
+            (list (cons U8 1) (cons U16 2) (cons U32 4) (cons U64 8)
+                  (cons S8 1) (cons S16 2) (cons S32 4) (cons S64 8)
                   (cons F32 4) (cons F64 8)
                   (cons Char 1) (cons Size 8)
-                  (cons (Ptr UI8) 8) (cons (Ptr UI64) 8)
-                  (cons (Arr 4 UI8) 4) (cons (Arr 4 UI64) 32)
-                  (cons (Ptr (Fun (list UI8 UI8) UI8)) 8)
+                  (cons (Ptr U8) 8) (cons (Ptr U64) 8)
+                  (cons (Arr 4 U8) 4) (cons (Arr 4 U64) 32)
+                  (cons (Ptr (Fun (list U8 U8) U8)) 8)
                   (cons Bool 1)
                   (cons Posn 8) (cons FloatInt 8)))])
       (match-define (cons t s) t*s)
@@ -57,8 +57,8 @@
 
   (let ()
     (cchk ($let* ([Posn p])
-                 ($set! ($@ p #:x) ($v UI32 1))
-                 ($set! ($@ p #:y) ($v UI32 2))
+                 ($set! ($@ p #:x) ($v U32 1))
+                 ($set! ($@ p #:y) ($v U32 2))
                  ($do ($printf ($v "%u %u\n") ($@ p #:x) ($@ p #:y))))
           (list "1 2")))
 
@@ -66,7 +66,7 @@
     (cchk ($let* ([FloatInt f])
                  ($set! ($@ f #:f) ($v F64 3.14))
                  ($do ($printf ($v "%f %llu\n") ($@ f #:f) ($@ f #:u)))
-                 ($set! ($@ f #:u) ($v UI64 3))
+                 ($set! ($@ f #:u) ($v U64 3))
                  ($do ($printf ($v "%f %llu\n") ($@ f #:f) ($@ f #:u))))
           (list "3.140000 4614253070214989087"
                 "0.000000 3")))
@@ -76,15 +76,15 @@
       ($let* ([Bool i e])
              ($do ($printf ($v "%u\n")
                            ($ife i
-                                 ($v UI8 1)
-                                 ($v UI8 0))))))
-    (cchk ($let* ([(Arr 4 UI8) a]
-                  [(Arr 4 UI8) b])
-                 ($set! ($aref a ($v UI8 0)) ($v UI8 1))
-                 ($set! ($aref a ($v UI8 1)) ($v UI8 2))
-                 ($set! ($aref a ($v UI8 2)) ($v UI8 3))
-                 ($set! ($aref a ($v UI8 3)) ($v UI8 4))
-                 ($do ($printf ($v "%u\n") ($@ a ($v UI8 2))))
+                                 ($v U8 1)
+                                 ($v U8 0))))))
+    (cchk ($let* ([(Arr 4 U8) a]
+                  [(Arr 4 U8) b])
+                 ($set! ($aref a ($v U8 0)) ($v U8 1))
+                 ($set! ($aref a ($v U8 1)) ($v U8 2))
+                 ($set! ($aref a ($v U8 2)) ($v U8 3))
+                 ($set! ($aref a ($v U8 3)) ($v U8 4))
+                 ($do ($printf ($v "%u\n") ($@ a ($v U8 2))))
                  ($do ($printf ($v "%u\n") ($@ * a)))
                  ($begin (cmp ($!= a b))
                          (cmp ($!= a a))
@@ -97,17 +97,17 @@
 
   (let ()
     (define add2
-      ($proc ([UI8 a]) UI8
-             ($ret ($+ a ($v UI8 2)))))
+      ($proc ([U8 a]) U8
+             ($ret ($+ a ($v U8 2)))))
     (define add3
-      ($proc ([UI8 a]) UI8
-             ($ret ($+ a ($v UI8 3)))))
+      ($proc ([U8 a]) U8
+             ($ret ($+ a ($v U8 3)))))
     (cchk
-     ($let* ([(Ptr (Fun (list UI8) UI8))
+     ($let* ([(Ptr (Fun (list U8) U8))
               f ($& add2)]
-             [(Ptr (Fun (list UI8) UI8))
+             [(Ptr (Fun (list U8) U8))
               g ($& add3)]
-             [UI8 two ($v UI8 2)])
+             [U8 two ($v U8 2)])
             ($do ($printf ($v "%u\n") (add2 two)))
             ($do ($printf ($v "%u\n") ($app ($@ * f) two)))
             ($do ($printf ($v "%u\n") ($app f two)))
@@ -115,34 +115,34 @@
             ($do ($printf ($v "%u\n") ($app ($@ * g) two)))
             ($do ($printf ($v "%u\n") ($app g two)))
             ($do ($printf ($v "%d\n")
-                          ($ife ($== f f) ($v UI8 1) ($v UI8 0))))
+                          ($ife ($== f f) ($v U8 1) ($v U8 0))))
             ($do ($printf ($v "%d\n")
-                          ($ife ($== f g) ($v UI8 1) ($v UI8 0)))))
+                          ($ife ($== f g) ($v U8 1) ($v U8 0)))))
      (list "4" "4" "4"
            "5" "5" "5"
            "1" "0")))
 
-  (cchk ($let* ([UI8 i ($v UI8 32)]
-                [UI8 j ($v UI8 32)]
-                [UI8 k ($v UI8 33)]
-                [(Ptr UI8) ip1 ($& i)]
-                [(Ptr UI8) ip2 ($& i)]
-                [(Ptr UI8) jp ($& j)]
-                [(Ptr UI8) kp ($& k)])
+  (cchk ($let* ([U8 i ($v U8 32)]
+                [U8 j ($v U8 32)]
+                [U8 k ($v U8 33)]
+                [(Ptr U8) ip1 ($& i)]
+                [(Ptr U8) ip2 ($& i)]
+                [(Ptr U8) jp ($& j)]
+                [(Ptr U8) kp ($& k)])
                ($do ($printf ($v "%d\n")
-                             ($ife ($== ip1 ip2) ($v UI8 1) ($v UI8 0))))
+                             ($ife ($== ip1 ip2) ($v U8 1) ($v U8 0))))
                ($do ($printf ($v "%d\n")
-                             ($ife ($!= ip1 ip2) ($v UI8 1) ($v UI8 0))))
+                             ($ife ($!= ip1 ip2) ($v U8 1) ($v U8 0))))
                ($do ($printf ($v "%d\n")
-                             ($ife ($== ip1 jp) ($v UI8 1) ($v UI8 0))))
+                             ($ife ($== ip1 jp) ($v U8 1) ($v U8 0))))
                ($do ($printf ($v "%d\n")
-                             ($ife ($!= ip1 jp) ($v UI8 1) ($v UI8 0))))
+                             ($ife ($!= ip1 jp) ($v U8 1) ($v U8 0))))
                ($do ($printf ($v "%d\n")
                              ($ife ($== ($@ * ip1) ($@ * jp))
-                                   ($v UI8 1) ($v UI8 0))))
+                                   ($v U8 1) ($v U8 0))))
                ($do ($printf ($v "%d\n")
                              ($ife ($== ($@ * ip1) ($@ * kp))
-                                   ($v UI8 1) ($v UI8 0)))))
+                                   ($v U8 1) ($v U8 0)))))
         (list "1" "0" "0" "1" "1" "0"))
 
   (for ([$op (in-list (list $and $or))]
@@ -151,8 +151,8 @@
            [y (in-list '(#t #f))])
       (cchk ($do ($printf ($v "%u\n")
                           ($ife ($op ($v x) ($v y))
-                                ($v UI8 42)
-                                ($v UI8 32))))
+                                ($v U8 42)
+                                ($v U8 32))))
             (list (if (op x y) 42 32)))))
   (let ()
     (define (test-$op X Y TY TYp $op op
@@ -171,7 +171,7 @@
           [op (in-list (list modulo bitwise-and bitwise-ior bitwise-xor
                              arithmetic-shift
                              (λ (x y) (arithmetic-shift x (* -1 y)))))])
-      (for ([TY (in-list (list UI8 UI16 UI32 UI64))]
+      (for ([TY (in-list (list U8 U16 U32 U64))]
             [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"))])
         (test-$op 13 4 TY TYp $op op)))
     (let ()
@@ -186,18 +186,18 @@
     (let ()
       (define X 8)
       (define Y 6)
-      (for ([TY (in-list (list UI8 UI16 UI32 UI64
-                               SI8 SI16 SI32 SI64))]
+      (for ([TY (in-list (list U8 U16 U32 U64
+                               S8 S16 S32 S64))]
             [TYp (in-list (list "%hhu" "%hu" "%u" "%llu"
                                 "%hhd" "%hd" "%d" "%lld"))])
         (for ([$op (in-list (list $* $- $+ $/))]
               [op (in-list (list * - + quotient))])
           (test-$op X Y TY TYp $op op)))))
   (cchk ($do ($printf ($v "%u\n")
-                      ($seal 'MPH ($v UI32 19))))
+                      ($seal 'MPH ($v U32 19))))
         '("19"))
   (cchk ($do ($printf ($v "%u\n")
-                      ($+ ($v UI32 1) ($unseal 'MPH ($seal 'MPH ($v UI32 19))))))
+                      ($+ ($v U32 1) ($unseal 'MPH ($seal 'MPH ($v U32 19))))))
         '("20"))
   (let ()
     (define (!= x y) (not (= x y)))
@@ -206,17 +206,17 @@
                              != ==))]
           [$<= (in-list (list $<= $< $> $>= $!= $==))])
       (define (<=-test TY L R)
-        (cchk ($let* ([UI8 i ($v UI8 0)]
+        (cchk ($let* ([U8 i ($v U8 0)]
                       [TY l ($v TY L)])
                      ($when ($<= l ($v TY R))
-                            ($set! i ($v UI8 1)))
+                            ($set! i ($v U8 1)))
                      ($do ($printf ($v "%d\n") i)))
               (list (number->string (if (<= L R) 1 0)))))
       (<=-test F64 4.0 16.0)
       (<=-test F64 16.0 16.0)
       (<=-test F64 16.0 4.0)
-      (for ([TY (in-list (list UI8 UI16 UI32 UI64
-                               SI8 SI16 SI32 SI64))])
+      (for ([TY (in-list (list U8 U16 U32 U64
+                               S8 S16 S32 S64))])
         (<=-test TY 4 16)
         (<=-test TY 16 16)
         (<=-test TY 16 4))))
@@ -225,15 +225,15 @@
       (cchk ($let1 ([TY i ($bneg ($v TY 5))])
                    ($do ($printf ($v fmt) i)))
             (list (number->string (- (- max 1) 5)))))
-    (bneg-test  UI8 "%hhu\n" (expt 2  8))
-    (bneg-test UI16  "%hu\n" (expt 2 16))
-    (bneg-test UI32   "%u\n" (expt 2 32))
-    (bneg-test UI64 "%llu\n" (expt 2 64)))
-  (cchk ($do ($printf ($v "%d\n") ($neg ($v SI32 5))))
+    (bneg-test  U8 "%hhu\n" (expt 2  8))
+    (bneg-test U16  "%hu\n" (expt 2 16))
+    (bneg-test U32   "%u\n" (expt 2 32))
+    (bneg-test U64 "%llu\n" (expt 2 64)))
+  (cchk ($do ($printf ($v "%d\n") ($neg ($v S32 5))))
         '("-5"))
-  (cchk ($do ($printf ($v "%d\n") ($neg ($v SI32 -5))))
+  (cchk ($do ($printf ($v "%d\n") ($neg ($v S32 -5))))
         '("5"))
-  (cchk ($do ($printf ($v "%llu\n") (fac ($v UI64 12))))
+  (cchk ($do ($printf ($v "%llu\n") (fac ($v U64 12))))
         '("479001600"))
   (cchk ($let1 ([String fmt ($v "Hello World!\n")])
                ($do ($printf ($v "%s") fmt)))
@@ -261,32 +261,32 @@
         '("3.140000"))
   (cchk $nop
         '())
-  (cchk ($let1 ([UI8 i ($v UI8 0)])
-               ($when ($!= i ($v UI8 0))
-                      ($set! i ($v UI8 1)))
+  (cchk ($let1 ([U8 i ($v U8 0)])
+               ($when ($!= i ($v U8 0))
+                      ($set! i ($v U8 1)))
                ($do ($printf ($v "when %d\n") i)))
         '("when 0"))
-  (cchk ($let1 ([UI8 i ($v UI8 0)])
-               ($unless ($!= i ($v UI8 0))
-                        ($set! i ($v UI8 1)))
+  (cchk ($let1 ([U8 i ($v U8 0)])
+               ($unless ($!= i ($v U8 0))
+                        ($set! i ($v U8 1)))
                ($do ($printf ($v "unless %d\n") i)))
         '("unless 1"))
   (cchk ($begin
          ($do ($printf ($v "for:")))
-         ($for ([UI8 i ($in-range ($v UI8 10))])
+         ($for ([U8 i ($in-range ($v U8 10))])
                ($do ($printf ($v " %d") i)))
          ($do ($printf ($v "\n"))))
         '("for: 0 1 2 3 4 5 6 7 8 9"))
   (cchk ($let* () ($do ($printf ($v "nothing\n"))))
         '("nothing"))
-  (cchk ($let* ([UI8 i ($v UI8 12)])
+  (cchk ($let* ([U8 i ($v U8 12)])
                ($do ($printf ($v "%d\n") i)))
         '("12"))
-  (cchk ($let* ([UI8 i ($v UI8 12)]
-                [UI8 j ($v UI8 24)])
+  (cchk ($let* ([U8 i ($v U8 12)]
+                [U8 j ($v U8 24)])
                ($do ($printf ($v "%d %d\n") i j)))
         '("12 24"))
-  (cchk ($let* ([UI8 i ($v UI8 12)]
-                [UI8 i ($v UI8 24)])
+  (cchk ($let* ([U8 i ($v U8 12)]
+                [U8 i ($v U8 24)])
                ($do ($printf ($v "%d\n") i)))
         '("24")))

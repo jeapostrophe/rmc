@@ -3,28 +3,28 @@
          "../h/libc.rkt")
 
 (define fac-rec
-  ($proc ([UI64 n]) UI64
-         ($if ($<= n ($v UI64 0))
-              ($ret ($v UI64 1))
+  ($proc ([U64 n]) U64
+         ($if ($<= n ($v U64 0))
+              ($ret ($v U64 1))
               ($ret ($* n
-                        (fac-rec ($- n ($v UI64 1))))))))
+                        (fac-rec ($- n ($v U64 1))))))))
 (define fac
-  ($proc ([UI64 n]) UI64
-         ($let1 ([UI64 acc ($v UI64 1)])
-                ($while ($!= n ($v UI64 0))
+  ($proc ([U64 n]) U64
+         ($let1 ([U64 acc ($v U64 1)])
+                ($while ($!= n ($v U64 0))
                         ($set! acc ($* acc n))
-                        ($set! n ($- n ($v UI64 1))))
+                        ($set! n ($- n ($v U64 1))))
                 ($ret acc))))
 (define main
-  ($proc () SI32
+  ($proc () S32
          (define (test-fac which fac)
-           ($let1 ([UI64 r ($v UI64 0)])
-                  ($for ([UI32 i ($in-range ($v UI32 10000))])
-                        ($set! r (fac ($v UI64 12))))
+           ($let1 ([U64 r ($v U64 0)])
+                  ($for ([U32 i ($in-range ($v U32 10000))])
+                        ($set! r (fac ($v U64 12))))
                   ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
          ($begin (test-fac "iter" fac)
                  (test-fac " rec" fac-rec)
-                 ($ret ($v SI32 0)))))
+                 ($ret ($v S32 0)))))
 (define this
   ($default-flags ($exe main)))
 
