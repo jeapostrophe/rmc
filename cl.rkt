@@ -67,10 +67,16 @@
    (-> (or/c #f pp:doc?))])
 
 (define (Type*-eq x y)
-  (or (Any? x)
-      (Any? y)
-      (eq? x y)
-      ((Type-eq x) y)))
+  (cond
+    #;[(Extern? x)
+     (Type*-eq (Extern-st x) y)]
+    #;[(Extern? y)
+     (Type*-eq x (Extern-st y))]
+    [else
+     (or (Any? x)
+         (Any? y)
+         (eq? x y)
+         ((Type-eq x) y))]))
 (define ((Type*-eq-p x) y)
   (Type*-eq x y))
 
@@ -156,6 +162,7 @@
 (define (Int-unsigned? t)
   (not (Int-signed? t)))
 
+;; XXX change to UX and SX
 (define-class-alias  UI8 (Int #f 8))
 (define-class-alias UI16 (Int #f 16))
 (define-class-alias UI32 (Int #f 32))
@@ -402,7 +409,6 @@
   (define pp:val pp:never)
   (define (pp:init) #f))
 
-;; XXX Deal with Extern on RHS
 (define-class Extern
   #:fields
   [h CHeader?]
