@@ -1,6 +1,7 @@
 #lang racket/base
 (require "../cl.rkt")
 
+;; XXX make easy
 (define <stdio.h> (CHeader '() '() '() "<stdio.h>" '()))
 (define $printf ($extern <stdio.h> "printf" Any))
 

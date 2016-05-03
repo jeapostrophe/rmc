@@ -68,9 +68,9 @@
 
 (define (Type*-eq x y)
   (cond
-    #;[(Extern? x)
+    [(Extern? x)
      (Type*-eq (Extern-st x) y)]
-    #;[(Extern? y)
+    [(Extern? y)
      (Type*-eq x (Extern-st y))]
     [else
      (or (Any? x)
@@ -284,7 +284,7 @@
         (pp:text "union")
         (pp:text "struct")))
   (define cn-pp (pp:text cn))
-  
+
   (define (pp #:name n #:ptrs p)
     (pp:h-append
      kind-pp pp:space cn-pp
@@ -313,14 +313,14 @@
                                        pp:semi)))))
        pp:line
        pp:rbrace pp:semi))
-    
+
     (when (ec-struct! this forward-decl-pp decl-pp)
       (for ([f (in-list fs)])
         ((Type-h! ((cdr f))) !))))
 
   (define (val? x) #f)
   (define pp:val pp:never)
-  
+
   (define (pp:init)
     (cond
       [union?
@@ -432,7 +432,7 @@
   #:fields
   [v? (or/c #f (-> any/c boolean?))]
   [ppv (or/c #f (-> any/c pp:doc?))]
-  [tag symbol?] [st Type?]  
+  [tag symbol?] [st Type?]
   #:methods Type
   (define (name) (format "~a<~a>" tag ((Type-name st))))
   (define (pp #:name n #:ptrs p)
@@ -466,6 +466,7 @@
 
 (define (gencsym [s 'c])
   (symbol->string (gensym (regexp-replace* #rx"[^A-Za-z_0-9]" (format "_~a" s) "_"))))
+(provide gencsym)
 
 ;;; Expressions
 
@@ -512,7 +513,7 @@
 
 (define Lval/c
   (and/c Expr?
-         (flat-named-contract "Expr-lval?"                              
+         (flat-named-contract "Expr-lval?"
                               (λ (x)
                                 ((Expr-lval? x))))))
 
@@ -790,7 +791,7 @@
   #:ty Bool)
 
 (define-op2-class $!=
-  #:lhs-ctc 
+  #:lhs-ctc
   (or/c Number/c
         (Expr?/c "pointer" *Ptr?))
   #:pp "!="
@@ -1026,7 +1027,7 @@
   [vty Type?]
   [bodyf (-> Var? Stmt?)]
   #:methods Stmt
-  (define var (Var vty (gencsym hn)))  
+  (define var (Var vty (gencsym hn)))
   (define body (bodyf var))
   (define (pp)
     (define the-init ((Type-pp:init vty)))
@@ -1135,7 +1136,7 @@
   (define (name)
     (or (ec-global-name this)
         default-name))
-  
+
   (define (visit! #:headers! headers!)
     (define global? (ec-global-name this))
     (define n (name))
@@ -1275,15 +1276,16 @@
        (hash-set! d->pp d (ppf #:proto-only? #f)))
      (repeat))))
 
-(define-class $exe
+(define-class $lib
   #:fields
-  [main $%proc?]
+  [lib (hash/c CName? Decl?)]
   #:methods Unit
   (define (emit)
     (define ec (make-emit-context))
     (parameterize ([current-ec ec])
-      (ec-global-name! main "main")
-      (ec-add-decl! main)
+      (for ([(k v) (in-hash lib)])
+        (ec-global-name! v k)
+        (ec-add-decl! v))
       (ec-fixed-point! ec))
 
     (define (h-collect f)
@@ -1299,7 +1301,7 @@
       (v-append-l (hash-values ht)))
     (define (v-append-set s)
       (v-append-l (set->list s)))
-    
+
     (emit-result
      (h-collect CHeader-cflags)
      (h-collect CHeader-ldflags)
@@ -1309,6 +1311,10 @@
       (v-append-hash (emit-context-struct->def-pp ec))
       (v-append-hash (emit-context-decl->proto-pp ec))
       (v-append-hash (emit-context-decl->pp ec))))))
+
+(define-simple-macro ($exe p)
+  ($lib (hash "main" p)))
+(provide $exe)
 
 ;; Compiler
 
@@ -1337,29 +1343,48 @@
     (λ () (t p))
     (λ ()
       (delete-file* p))))
+(provide call-with-temporary)
 
-;; XXX Choose a name to the compilation
+(define (output-c! c-p er)
+  (with-output-to-file c-p
+    #:exists 'replace
+    (λ () (er-print! er))))
+
+(define (compile! c-p o-p er)
+  (or (apply system* (find-executable-path "cc")
+             (append (emit-result-cflags er)
+                     (list c-p "-c" "-o" o-p)))
+      (error 'run "Failed to compile"))
+  (void))
+
+(define (link-bin! object-p bin-p er #:more-flags [more-flags '()])
+  (or (apply system* (find-executable-path "cc")
+             (append (list object-p) (emit-result-ldflags er)
+                     more-flags (list "-o" bin-p)))
+      (error 'link "Failed to link"))
+  (void))
+
+(define (link-lib! object-p lib-p er)
+  (link-bin! object-p lib-p er
+             #:more-flags
+             (match (system-type 'os)
+               ['macosx '("-dynamiclib")])))
+
 (define (compile&f u f)
   (define er (emit u))
   (call-with-temporary
    "~a.c"
    (λ (c)
-     (with-output-to-file c #:exists 'replace (λ () (er-print! er)))
+     (output-c! c er)
      (call-with-temporary
       "~a.o"
       (λ (o)
-        (define cc-pth (find-executable-path "cc"))
-        (or (apply system* cc-pth (append (emit-result-cflags er) (list c "-c" "-o" o)))
-            (error 'run "Failed to compile"))
+        (compile! c o er)
         (call-with-temporary
          "~a.bin"
          (λ (b)
-           (or (apply system* cc-pth
-                      (append (list o) (emit-result-ldflags er) (list "-o" b)))
-               (error 'run "Failed to link"))
+           (link-bin! o b er)
            (f b))))))))
-
-;; XXX Make a way to link in a set of functions to Racket
 
 (define (run u)
   (compile&f u (λ (b) (system* b) (void))))
@@ -1374,11 +1399,15 @@
                (define cpt (thread (λ () (copy-port stdout bs-stdout))))
                (subprocess-wait sp)
                (thread-wait cpt)
-               (close-input-port stdout)               
+               (close-input-port stdout)
                (get-output-string bs-stdout))))
 
 (provide
  (contract-out
+  [emit (-> Unit? emit-result?)]
+  [output-c! (-> path-string? emit-result? void?)]
+  [compile! (-> path-string? path-string? emit-result? void?)]
+  [link-lib! (-> path-string? path-string? emit-result? void?)]
   [compile&f (-> Unit? (-> path-string? any) any)]
   [run (-> Unit? void?)]
   [run&capture (-> Unit? string?)]))
@@ -1417,7 +1446,6 @@
        ($%app rator (list rand ...)))]))
 (provide $app)
 
-;; XXX Pass along srcloc?
 (define ($v* v)
   (match v
     [(? string?)
@@ -1426,7 +1454,6 @@
      ($v Bool v)]
     [_
      (error '$v "cannot infer type of ~e" v)]))
-(provide $*)
 
 (define-syntax ($v stx)
   (syntax-parse stx
