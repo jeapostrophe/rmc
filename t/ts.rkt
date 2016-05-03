@@ -1,9 +1,9 @@
 #lang racket/base
 (module+ test
   (require racket/match
-           "../cl.rkt"
-           "../h/libc.rkt"
-           "../t.rkt"
+           rmc
+           rmc/h/libc
+           rmc/t
            "fac.rkt")
 
   (define (band a b) (and a b))

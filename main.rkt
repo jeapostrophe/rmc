@@ -11,7 +11,7 @@
          racket/list
          racket/bool
          syntax/parse/define
-         "class.rkt")
+         "private/class.rkt")
 
 ;;; General
 (require (prefix-in pp: pprint))

@@ -1,7 +1,7 @@
 #lang racket/base
-(require "../t.rkt"
-         "../cl.rkt"
-         "../h/libc.rkt")
+(require rmc
+         rmc/h/libc
+         rmc/t)
 
 (module+ test
   (cchk ($begin ($do ($printf ($v "test")))

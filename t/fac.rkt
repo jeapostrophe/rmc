@@ -1,6 +1,6 @@
 #lang racket/base
-(require "../cl.rkt"
-         "../h/libc.rkt")
+(require rmc
+         rmc/h/libc)
 
 (define fac-rec
   ($proc ([U64 n]) U64

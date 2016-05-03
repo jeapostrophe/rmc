@@ -1,4 +1,12 @@
+rmc - Racket-Made C
+
 This is an experimental library for generating C from Racket.
+
+      h/ - Header files for existing C libraries
+      t/ - Test suites
+private/ - Utlities for implementation
+   t.rkt - Testing helpers
+ lib.rkt - Using rmc functions from Racket
 
 At a first glance, all it is is parenthetical C with a pretty-printer
 written in Racket.

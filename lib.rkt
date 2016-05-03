@@ -3,7 +3,7 @@
                      syntax/parse)
          racket/match
          ffi/unsafe
-         "cl.rkt")
+         "main.rkt")
 
 (define (Type->ffi t)
   (match t
@@ -54,11 +54,11 @@
         (get-ffi-obj n the-lib rt))))
   (apply values vs))
 
-(define-syntax (define-cl-lib stx)
+(define-syntax (define*/rmc stx)
   (syntax-parse stx
     [(_ [i:id d:expr] ...+)
      (syntax/loc stx
        (define-values (i ...)
          (compile+link+ret '(i ...) (list d ...))))]))
 
-(provide define-cl-lib)
+(provide define*/rmc)

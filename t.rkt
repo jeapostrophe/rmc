@@ -1,7 +1,7 @@
 #lang racket/base
 (require chk
          racket/string
-         "cl.rkt")
+         "main.rkt")
 
 (define (cchk stmt output)
   (define main

@@ -1,5 +1,5 @@
 #lang racket/base
-(require "../cl.rkt")
+(require rmc)
 
 ;; XXX make easy
 (define <stdio.h> (CHeader '() '() '() "<stdio.h>" '()))

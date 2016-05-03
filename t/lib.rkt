@@ -1,9 +1,9 @@
 #lang racket/base
-(require "../cl.rkt"
-         "../lib.rkt"
+(require rmc
+         rmc/lib
          "fac.rkt")
 
-(define-cl-lib
+(define*/rmc
   [cdouble
    ($proc ([U8 x]) U8
           ($ret ($+ x x)))]
