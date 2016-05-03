@@ -1,17 +1,21 @@
 #lang racket/base
-(require rmc)
+(require rmc
+         rmc/h)
 
-;; XXX make easy
-(define <stdio.h> (CHeader '() '() '() "<stdio.h>" '()))
-(define $printf ($extern <stdio.h> "printf" Any))
-
-(define FILE (Extern <stdio.h> (Opaque "FILE")))
-(define stdin ($extern <stdio.h> "stdin" (Ptr FILE)))
-(define stdout ($extern <stdio.h> "stdout" (Ptr FILE)))
-(define stderr ($extern <stdio.h> "stderr" (Ptr FILE)))
-
-(define fflush
-  ($extern <stdio.h> "fflush"
-           (Fun (list (Ptr FILE)) S32)))
-
-(provide (all-defined-out))
+(define-rmc/header
+  (H "<stdio.h>")
+  (T FILE)
+  (T fpos_t)
+  (V stderr FILE*)
+  (V stdin FILE*)
+  (V stdout FILE*)
+  (F clearerr FILE* -> Void)
+  (F fclose FILE* -> S32)
+  (F fdopen S32 String -> FILE*)
+  (F feof FILE* -> S32)
+  (F ferror FILE* -> S32)
+  (F fflush FILE* -> S32)
+  (F fgetc FILE* -> S32)
+  (F fgetpos FILE* fpos_t* -> S32)
+  ;; XXX fill out
+  (V [$printf printf]))

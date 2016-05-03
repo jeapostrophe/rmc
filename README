@@ -5,6 +5,7 @@ This is an experimental library for generating C from Racket.
       h/ - Header files for existing C libraries
       t/ - Test suites
 private/ - Utlities for implementation
+   h.rkt - Header definition helpers
    t.rkt - Testing helpers
  lib.rkt - Using rmc functions from Racket
 
