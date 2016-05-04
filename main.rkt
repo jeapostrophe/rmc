@@ -254,6 +254,8 @@
 
 (define-class *Struct
   #:fields
+  [extern-h (or/c false/c CHeader?)]
+  [extern-cn (or/c false/c CName?)]
   [hn symbol?]
   [union? boolean?]
   [fs (and/c (listof (cons/c field? (-> Type?)))
@@ -263,7 +265,7 @@
                 (define fs (map car x))
                 (not (check-duplicates fs field=?)))))]
   #:methods Type
-  (define cn (gencsym hn))
+  (define cn (or extern-cn (gencsym hn)))
   (define (name)
     (list (if union? 'union 'struct)
           cn
@@ -284,10 +286,15 @@
         (pp:text "union")
         (pp:text "struct")))
   (define cn-pp (pp:text cn))
+  (define type-pp
+    (if extern-h
+        cn-pp
+        (pp:h-append kind-pp pp:space cn-pp)))
 
   (define (pp #:name n #:ptrs p)
+
     (pp:h-append
-     kind-pp pp:space cn-pp
+     type-pp
      (if (zero? p)
          pp:empty
          (pp:h-append pp:space (pp:text (make-string p #\*))))
@@ -296,23 +303,29 @@
          pp:empty)))
 
   (define (h! !)
+    (when extern-h
+      (! extern-h))
     (define forward-decl-pp
-      (pp:h-append kind-pp pp:space cn-pp pp:semi))
+      (if extern-h
+          pp:empty
+          (pp:h-append kind-pp pp:space cn-pp pp:semi)))
     (define decl-pp
-      (pp:h-append
-       kind-pp pp:space cn-pp pp:space
-       pp:lbrace
-       (pp:nest NEST
-                (pp:h-append pp:line
-                             (apply pp:v-append
-                                    (for/list ([f (in-list fs)])
-                                      (pp:h-append
-                                       ((Type-pp ((cdr f)))
-                                        #:name (field->string (car f))
-                                        #:ptrs 0)
-                                       pp:semi)))))
-       pp:line
-       pp:rbrace pp:semi))
+      (if extern-h
+          pp:empty
+          (pp:h-append
+           kind-pp pp:space cn-pp pp:space
+           pp:lbrace
+           (pp:nest NEST
+                    (pp:h-append pp:line
+                                 (apply pp:v-append
+                                        (for/list ([f (in-list fs)])
+                                          (pp:h-append
+                                           ((Type-pp ((cdr f)))
+                                            #:name (field->string (car f))
+                                            #:ptrs 0)
+                                           pp:semi)))))
+           pp:line
+           pp:rbrace pp:semi)))
 
     (when (ec-struct! this forward-decl-pp decl-pp)
       (for ([f (in-list fs)])
@@ -355,18 +368,30 @@
 
 (define-syntax (Struct stx)
   (syntax-parse stx
-    [(_ [f:id ty:expr] ...)
+    [(_ [ty:expr f:id] ...)
      (quasisyntax/loc stx
-       (*Struct (or '#,(syntax-local-name) (gensym 'struct))
+       (*Struct #f #f
+                (or '#,(syntax-local-name) (gensym 'struct))
                 #f
                 (list (cons 'f (λ () ty)) ...)))]))
 (provide Struct)
 
+(define-syntax (ExternStruct stx)
+  (syntax-parse stx
+    [(_ header:expr cn:expr [ty:expr f:id] ...)
+     (quasisyntax/loc stx
+       (*Struct header cn
+                (or '#,(syntax-local-name) (gensym 'struct))
+                #f
+                (list (cons 'f (λ () ty)) ...)))]))
+(provide ExternStruct)
+
 (define-syntax (Union stx)
   (syntax-parse stx
-    [(_ [f:id ty:expr] ...)
+    [(_ [ty:expr f:id] ...)
      (quasisyntax/loc stx
-       (*Struct (or '#,(syntax-local-name) (gensym 'union))
+       (*Struct #f #f
+                (or '#,(syntax-local-name) (gensym 'union))
                 #t
                 (list (cons 'f (λ () ty)) ...)))]))
 (provide Union)
@@ -486,30 +511,106 @@
    (format "~a type" ((Type-name ty)))
    (Type*-eq-p ty)))
 
-(define (Expr?/c lab ty?)
-  (define name (format "Expr with ~a" lab))
-  (make-flat-contract
-   #:name name
+;; XXX Clean up. This is so ugly. Most of it is because of how
+;; racket/contract works.
+(struct Expr?/c (lab ty?)
+  #:property prop:contract
+  (build-contract-property
+   #:name
+   (λ (c)
+     (match-define (Expr?/c lab ty?) c)
+     (format "Expr with ~a" lab))
    #:first-order
-   (λ (x)
-     (and (Expr? x)
-          (let ([xt ((Expr-ty x))])
-            (or (Any? xt) (ty? xt)))))
-   #:projection
-   (λ (b)
+   (λ (c)
+     (match-define (Expr?/c lab ty?) c)
      (λ (x)
-       (if (Expr? x)
-           (let ([xt ((Expr-ty x))])
-             (if (or (Any? xt) (ty? xt))
-                 x
-                 (raise-blame-error
-                  b x
-                  '(expected: "~a" given: "Expr(~e) with type ~a")
-                  name x ((Type-name xt)))))
-           (raise-blame-error
-            b x
-            '(expected: "~a" given: "~e")
-            name x))))))
+       (and (Expr? x)
+            (let ([xt ((Expr-ty x))])
+              (or (Any? xt) (ty? xt))))))
+   #:projection
+   (λ (c)
+     (match-define (Expr?/c lab ty?) c)
+     (define name (format "Expr with ~a" lab))
+     (λ (b)
+       (λ (x)
+         (if (Expr? x)
+             (let ([xt ((Expr-ty x))])
+               (if (or (Any? xt) (ty? xt))
+                   x
+                   (raise-blame-error
+                    b x
+                    '(expected: "~a" given: "Expr(~e) with type ~a")
+                    name x ((Type-name xt)))))
+             (raise-blame-error
+              b x
+              '(expected: "~a" given: "~e")
+              name x)))))))
+
+(struct *Expr-or/c (f as)
+  #:property prop:contract
+  (build-contract-property
+   #:name
+   (λ (c)
+     (match-define (*Expr-or/c f as) c)
+     (format "Expr with one of (~a)"
+             (add-between (map Expr?/c-lab as) ",")))
+   #:first-order
+   (λ (c)
+     (match-define (*Expr-or/c f as) c)
+     (λ (x)
+       (and (Expr? x)
+            (let ([xt (f ((Expr-ty x)))])
+              (or (Any? xt)
+                  (for/or ([a (in-list as)])
+                    (match-define (Expr?/c lab ty?) a)
+                    (ty? xt)))))))
+   #:projection
+   (λ (c)
+     (match-define (*Expr-or/c f as) c)
+     (define name
+       (format "Expr with one of (~a)"
+               (add-between (map Expr?/c-lab as) ",")))
+     (λ (b)
+       (λ (x)
+         (if (Expr? x)
+             (let ([xt (f ((Expr-ty x)))])
+               (if (or (Any? xt)
+                       (for/or ([a (in-list as)])
+                         (match-define (Expr?/c lab ty?) a)
+                         (ty? xt)))
+                   x
+                   (raise-blame-error
+                    b x
+                    '(expected: "~a" given: "Expr(~e) with type ~a")
+                    name x ((Type-name xt)))))
+             (raise-blame-error
+              b x
+              '(expected: "~a" given: "~e")
+              name x)))))))
+(define (Expr-or/c #:eventually? [eventually? #f] . args)
+  (define real-args
+    (flatten
+     (for/list ([a (in-list args)])
+       (cond
+         [(*Expr-or/c? a)
+          (*Expr-or/c-as a)]
+         [(Expr?/c? a)
+          a]
+         [else
+          (error 'Expr-or/c "illegal argument: ~e" a)]))))
+  (define (unwrap xt)
+    (cond
+      [(Extern? xt)
+       (unwrap (Extern-st xt))]
+      [(Seal*? xt)
+       (unwrap (Seal*-st xt))]
+      [else
+       xt]))
+  (define f
+    (if eventually?
+        unwrap
+        (λ (x) x)))
+  (*Expr-or/c f real-args))
 
 (define Lval/c
   (and/c Expr?
@@ -712,9 +813,9 @@
 (define Int/c (Expr?/c "integer" Int?))
 
 (define Signed-Number/c
-  (or/c (Expr?/c "floating" Float?)
-        (Expr?/c "signed integer"
-                 (λ (x) (and (Int? x) (Int-signed? x))))))
+  (Expr-or/c (Expr?/c "floating" Float?)
+             (Expr?/c "signed integer"
+                      (λ (x) (and (Int? x) (Int-signed? x))))))
 
 (define Unsigned-Int/c
   (Expr?/c "unsigned integer"
@@ -770,6 +871,21 @@
              ((Expr-h! lhs) !)
              ((Expr-h! rhs) !)))))]))
 
+(define-simple-macro (define-op2-macro new:id orig:id)
+  (begin
+    (define-syntax (new stx)
+      (syntax-parse stx
+        [_:id
+         (syntax/loc stx
+           orig)]
+        [(_ lhs rhs)
+         (syntax/loc stx
+           (orig lhs rhs))]
+        [(_ lhs more (... ...))
+         (syntax/loc stx
+           (orig lhs (new more (... ...))))]))
+    (provide new)))
+
 (define-op2-class $<=
   #:lhs-ctc Number/c
   #:pp "<="
@@ -790,30 +906,37 @@
   #:pp ">"
   #:ty Bool)
 
+(define ==-arg/c
+  (Expr-or/c
+    #:eventually? #t
+    Number/c
+    (Expr?/c "pointer" *Ptr?)))
+
 (define-op2-class $!=
-  #:lhs-ctc
-  (or/c Number/c
-        (Expr?/c "pointer" *Ptr?))
+  #:lhs-ctc ==-arg/c
   #:pp "!="
   #:ty Bool)
 
 (define-op2-class $==
-  #:lhs-ctc (or/c Number/c
-                  (Expr?/c "pointer" *Ptr?))
+  #:lhs-ctc ==-arg/c
   #:pp "=="
   #:ty Bool)
 
-(define-op2-class $*
+(define-op2-class $%*
   #:lhs-ctc Number/c
   #:pp "*")
+
+(define-op2-macro $* $%*)
 
 (define-op2-class $-
   #:lhs-ctc Number/c
   #:pp "-")
 
-(define-op2-class $+
+(define-op2-class $%+
   #:lhs-ctc Number/c
   #:pp "+")
+
+(define-op2-macro $+ $%+)
 
 (define-op2-class $/
   #:lhs-ctc Number/c
@@ -833,12 +956,15 @@
   #:lhs-ctc Unsigned-Int/c
   #:pp "^")
 
-(define-op2-class $and
+(define-op2-class $%and
   #:lhs-ctc (Expr/c Bool)
   #:pp "&&")
-(define-op2-class $or
+(define-op2-macro $and $%and)
+
+(define-op2-class $%or
   #:lhs-ctc (Expr/c Bool)
   #:pp "||")
+(define-op2-macro $or $%or)
 
 (define-syntax (define-bop2-class stx)
   (syntax-parse stx
@@ -893,11 +1019,12 @@
 
 (define-class $%app
   #:fields
-  [rator (or/c (Expr?/c "function" Fun?)
-               (Expr?/c "function ptr"
-                        (λ (x)
-                          (and (*Ptr? x)
-                               (Fun? (*Ptr-st x))))))]
+  [rator
+   (Expr-or/c (Expr?/c "function" Fun?)
+              (Expr?/c "function ptr"
+                       (λ (x)
+                         (and (*Ptr? x)
+                              (Fun? (*Ptr-st x))))))]
   [rands
    (let ([rator-ty ((Expr-ty rator))])
      (cond
@@ -1386,28 +1513,43 @@
            (link-bin! o b er)
            (f b))))))))
 
+(define (build! u b)
+  (define er (emit u))
+  (call-with-temporary
+   "~a.c"
+   (λ (c)
+     (output-c! c er)
+     (call-with-temporary
+      "~a.o"
+      (λ (o)
+        (compile! c o er)
+        (link-bin! o b er))))))
+
 (define (run u)
   (compile&f u (λ (b) (system* b) (void))))
 
+(define (capture-subprocess b . args)
+  (define bs-stdout (open-output-string))
+  (define-values (sp stdout stdin stderr)
+    (apply subprocess #f (current-input-port) (current-error-port) b args))
+  (local-require racket/port)
+  (define cpt (thread (λ () (copy-port stdout bs-stdout))))
+  (subprocess-wait sp)
+  (thread-wait cpt)
+  (close-input-port stdout)
+  (get-output-string bs-stdout))
+
 (define (run&capture u)
-  (compile&f u
-             (λ (b)
-               (define bs-stdout (open-output-string))
-               (define-values (sp stdout stdin stderr)
-                 (subprocess #f (current-input-port) (current-error-port) b))
-               (local-require racket/port)
-               (define cpt (thread (λ () (copy-port stdout bs-stdout))))
-               (subprocess-wait sp)
-               (thread-wait cpt)
-               (close-input-port stdout)
-               (get-output-string bs-stdout))))
+  (compile&f u capture-subprocess))
 
 (provide
  (contract-out
+  [capture-subprocess (->* (path-string?) () #:rest (listof string?) string?)]
   [emit (-> Unit? emit-result?)]
   [output-c! (-> path-string? emit-result? void?)]
   [compile! (-> path-string? path-string? emit-result? void?)]
   [link-lib! (-> path-string? path-string? emit-result? void?)]
+  [build! (-> Unit? path-string? void?)]
   [compile&f (-> Unit? (-> path-string? any) any)]
   [run (-> Unit? void?)]
   [run&capture (-> Unit? string?)]))
@@ -1436,7 +1578,7 @@
                  (define-class-alias this-$return ($ret/ty rt #f) #:no-provide)
                  (syntax-parameterize ([$ret (make-rename-transformer #'this-$ret)]
                                        [$return (make-rename-transformer #'this-$return)])
-                   . body))))]))
+                   ($begin . body)))))]))
 (provide $proc)
 
 (define-syntax ($app stx)
@@ -1545,6 +1687,8 @@
              #;"-Wno-unused-parameter"
              "-Wno-unused-function"
              "-Wno-tautological-compare"
+             ;; XXX I haven't implemented qualifiers
+             "-Wno-incompatible-pointer-types-discards-qualifiers"
              "-Werror" "-pedantic" "-std=c99" "-O3" "-march=native"
              "-fno-stack-protector" "-ffunction-sections" "-fdata-sections"
              "-fno-unwind-tables" "-fno-asynchronous-unwind-tables" "-fno-math-errno"

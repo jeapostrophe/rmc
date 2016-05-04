@@ -2,6 +2,7 @@
 (require (for-syntax racket/base
                      racket/syntax
                      syntax/parse)
+         syntax/parse/define
          racket/stxparam
          racket/splicing
          rmc)
@@ -64,6 +65,9 @@
        (begin (define n.rid ($extern current-rmc-h n.cstr t))
               (provide n.rid)))]))
 
+(define-simple-macro (Vs (n ...) t)
+  (begin (V n t) ...))
+
 (define-syntax (F stx)
   (syntax-parse stx
     #:datum-literals (->)
@@ -71,5 +75,50 @@
      (syntax/loc stx
        (V n (Fun (list dom ...) rng)))]))
 
+(define-syntax (E stx)
+  (syntax-parse stx
+    [(_ n:id t:expr v:id ...)
+     (syntax/loc stx
+       (begin
+         (define n-seal (gensym 'n))
+         (define n (Extern current-rmc-h (Seal n-seal t)))
+         (define v ($extern current-rmc-h (symbol->string 'v) n))
+         ...
+         (provide n v ...)))]))
+
+(define-syntax (S stx)
+  (syntax-parse stx
+    [(_ n:id [t:expr f:expr] ...)
+     (with-syntax ([n* (format-id #'n "~a*" #'n)])
+       (syntax/loc stx
+         (begin
+           (define n
+             (ExternStruct
+              current-rmc-h (symbol->string 'n)
+              [t f] ...))
+           (define n* (Ptr n))
+           (provide n n*))))]))
+
 (provide define-rmc/header
-         H V T F)
+         H V Vs T F E S)
+
+(require racket/string
+         racket/list
+         racket/contract/base)
+
+(define (pkg-config . args)
+  (string-split
+   (apply capture-subprocess
+          (find-executable-path "pkg-config") args)))
+(define (pkg-config-cflags lib)
+  (append*
+   (for/list ([l (in-list (pkg-config "--cflags" lib))])
+     (if (regexp-match #rx"^-I" l)
+         (list "-isystem" (substring l 2))
+         (list l)))))
+(define (pkg-config-ldflags lib) (pkg-config "--static" "--libs" lib))
+
+(provide
+ (contract-out
+  [pkg-config-cflags (-> string? (listof string?))]
+  [pkg-config-ldflags (-> string? (listof string?))]))

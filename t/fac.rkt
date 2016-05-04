@@ -17,14 +17,15 @@
                 ($ret acc))))
 (define main
   ($proc () S32
-         (define (test-fac which fac)
-           ($let1 ([U64 r ($v U64 0)])
-                  ($for ([U32 i ($in-range ($v U32 10000))])
-                        ($set! r (fac ($v U64 12))))
-                  ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
-         ($begin (test-fac "iter" fac)
-                 (test-fac " rec" fac-rec)
-                 ($ret ($v S32 0)))))
+         (let ()
+           (define (test-fac which fac)
+             ($let1 ([U64 r ($v U64 0)])
+                    ($for ([U32 i ($in-range ($v U32 10000))])
+                          ($set! r (fac ($v U64 12))))
+                    ($do ($printf ($v (format "~a r = %llu\n" which)) r))))
+           ($begin (test-fac "iter" fac)
+                   (test-fac " rec" fac-rec)
+                   ($ret ($v S32 0))))))
 (define this
   ($default-flags ($exe main)))
 

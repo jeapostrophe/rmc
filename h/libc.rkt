@@ -18,4 +18,5 @@
   (F fgetc FILE* -> S32)
   (F fgetpos FILE* fpos_t* -> S32)
   ;; XXX fill out
-  (V [$printf printf]))
+  (V [$printf printf])
+  (V [$fprintf fprintf]))

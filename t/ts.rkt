@@ -10,12 +10,12 @@
   (define (bor a b) (or a b))
 
   (define Posn
-    (Struct [x U32] [y U32]))
+    (Struct [U32 x] [U32 y]))
   (define FloatInt
-    (Union [f F64] [u U64]))
+    (Union [F64 f] [U64 u]))
 
   (define ListOfU8
-    (Struct [next (Ptr ListOfU8)] [data U8] [padding (Arr 7 U8)]))
+    (Struct [(Ptr ListOfU8) next] [U8 data] [(Arr 7 U8) padding]))
 
   (cchk ($let* ([ListOfU8 l1]
                 [ListOfU8 l2]
