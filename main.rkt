@@ -658,6 +658,7 @@
 (define-class $aref
   #:fields
   [e (Expr?/c "array or pointer" *Ptr?)]
+  ;; XXX This should really be size_t because then it is efficient
   [o Unsigned-Int/c]
   #:methods Expr
   (define (pp)
