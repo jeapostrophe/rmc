@@ -1617,6 +1617,7 @@
        ($seq s ($begin . ss)))]))
 (provide $begin)
 
+;; XXX Infer type?
 (define-syntax ($let1 stx)
   (syntax-parse stx
     [(_ ([ty:expr n:id e:expr]) . b)

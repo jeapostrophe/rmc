@@ -78,3 +78,6 @@ power of Racket:
   re-arrange the ASTs given to them (or they could use their own
   DSL-specific AST and translate it into this C AST.)
 
+=== TODO
+
+* Look at David Fisher's Ziggurat dissertation again
